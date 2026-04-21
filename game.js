@@ -110,6 +110,7 @@ const defaultState = () => ({
 
 let state = loadState();
 let tickerFrame = 0;
+let goalReadyLastTick = false;
 
 const el = {
   resourceStrip: document.getElementById("resourceStrip"),
@@ -125,7 +126,9 @@ const el = {
   wpsLabel: document.getElementById("wpsLabel"),
   goalLabel: document.getElementById("goalLabel"),
   incomeTicker: document.getElementById("incomeTicker"),
+  factoryView: document.getElementById("factoryView"),
   factoryGrid: document.getElementById("factoryGrid"),
+  fxLayer: document.getElementById("fxLayer"),
   toastLayer: document.getElementById("toastLayer"),
   sideMenu: document.getElementById("sideMenu"),
   modalLayer: document.getElementById("modalLayer"),
@@ -205,10 +208,14 @@ function gameTick() {
     el.rushStatus.textContent = "Tap to overclock lines and push your next upgrade.";
   }
 
+  el.factoryView.classList.toggle("boosted", now <= state.rush.activeUntil);
+
   tickerFrame += dt;
-  if (tickerFrame > 1) {
+  const flowInterval = now <= state.rush.activeUntil ? 0.55 : 1;
+  if (tickerFrame > flowInterval) {
     animateFlow();
     el.incomeTicker.textContent = `+$${fmt(cashGain / dt)}/s`;
+    if (cashGain > 0.01) spawnMoneyPop(cashGain / dt);
     tickerFrame = 0;
   }
 
@@ -291,6 +298,8 @@ function activateRush() {
   const cdPenalty = state.activeModifier?.rushCdAdd ? state.activeModifier.rushCdAdd * 1000 : 0;
   state.rush.activeUntil = now + duration;
   state.rush.cooldownUntil = now + 32000 + cdPenalty;
+  el.rushBtn.classList.add("boost-fire");
+  setTimeout(() => el.rushBtn.classList.remove("boost-fire"), 360);
   if (state.flags.smartTint) state.resources.research += 1;
   toast("Rush Order accepted! Lines overclocked.");
 }
@@ -478,6 +487,12 @@ function renderHUD() {
   const eta = secondsToAfford(goalTarget.cost);
   const etaLabel = eta === 0 ? "Affordable now" : (eta === Infinity ? "Build income first" : `~${fmt(eta)}s to afford`);
   el.goalLabel.textContent = `Goal: ${goalTarget.line.name} $${fmt(goalTarget.cost)} (${etaLabel})`;
+  const goalReady = eta === 0;
+  el.goalLabel.classList.toggle("ready", goalReady);
+  if (goalReady && !goalReadyLastTick) {
+    toast("Goal ready: next upgrade is affordable.");
+  }
+  goalReadyLastTick = goalReady;
 
   if (state.activeModifier) {
     const sec = Math.max(0, Math.ceil((state.modifierUntil - Date.now()) / 1000));
@@ -631,7 +646,10 @@ function animateFlow() {
       ],
       { duration: 980, easing: "linear" }
     );
-    setTimeout(() => item.remove(), 1000);
+    setTimeout(() => {
+      item.remove();
+      spawnCompletionBurst(path.to.x, path.to.y);
+    }, 1000);
   });
 }
 
@@ -639,6 +657,8 @@ function flashMachine(lineId) {
   const m = document.getElementById(`machine-${lineId}`);
   if (!m) return;
   m.classList.add("busy");
+  m.classList.add("upgraded");
+  setTimeout(() => m.classList.remove("upgraded"), 520);
   setTimeout(() => m.classList.remove("busy"), 400);
 }
 
@@ -652,6 +672,23 @@ function updateMachineActivity() {
       node.classList.remove("active");
     }
   });
+}
+
+function spawnMoneyPop(amountPerSec) {
+  const pop = document.createElement("div");
+  pop.className = "money-pop";
+  pop.textContent = `+$${fmt(amountPerSec)}/s`;
+  el.fxLayer.appendChild(pop);
+  setTimeout(() => pop.remove(), 760);
+}
+
+function spawnCompletionBurst(x, y) {
+  const burst = document.createElement("div");
+  burst.className = "completion-burst";
+  burst.style.left = `${x}px`;
+  burst.style.top = `${y}px`;
+  el.fxLayer.appendChild(burst);
+  setTimeout(() => burst.remove(), 460);
 }
 
 function toast(msg) {

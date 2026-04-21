@@ -134,6 +134,11 @@ h1 {
   font-weight: 600;
 }
 
+.goal-chip.ready {
+  border-color: #8bffc8;
+  box-shadow: 0 0 12px rgba(112, 255, 158, 0.3);
+}
+
 .screen {
   display: none;
   animation: fade 0.25s ease;
@@ -203,6 +208,13 @@ h1 {
   z-index: 3;
 }
 
+.fx-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
 .machine {
   position: absolute;
   width: 74px;
@@ -216,6 +228,7 @@ h1 {
   font-size: 0.65rem;
   text-align: center;
   overflow: hidden;
+  animation: machineIdle 3.4s ease-in-out infinite;
 }
 
 .machine .lamp {
@@ -257,12 +270,20 @@ h1 {
 
 .machine.busy { animation: throb 0.45s ease; }
 
+.machine.upgraded {
+  box-shadow: 0 0 0 2px rgba(137, 230, 255, 0.7), 0 0 18px rgba(137, 230, 255, 0.42);
+}
+
 @keyframes throb {
   50% { transform: scale(1.05); }
 }
 
 @keyframes stampMove {
   50% { transform: translateY(0px); }
+}
+
+@keyframes machineIdle {
+  50% { transform: translateY(-1px); }
 }
 
 .belt {
@@ -312,6 +333,20 @@ h1 {
   box-shadow: 0 0 8px rgba(146, 227, 255, 0.45);
 }
 
+.completion-burst {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #d7f6ff 0, rgba(148, 226, 255, 0.55) 60%, transparent 70%);
+  animation: burst 450ms ease-out forwards;
+}
+
+@keyframes burst {
+  from { transform: scale(0.5); opacity: 0.9; }
+  to { transform: scale(2.4); opacity: 0; }
+}
+
 .line-separator {
   position: absolute;
   left: 8px;
@@ -342,6 +377,23 @@ h1 {
   font-weight: 700;
   color: var(--accent2);
   z-index: 4;
+}
+
+.money-pop {
+  position: absolute;
+  left: 12px;
+  top: 34px;
+  color: #96ffba;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-shadow: 0 0 8px rgba(120, 255, 174, 0.5);
+  animation: moneyRise 760ms ease-out forwards;
+}
+
+@keyframes moneyRise {
+  from { opacity: 0; transform: translateY(6px) scale(0.9); }
+  20% { opacity: 1; }
+  to { opacity: 0; transform: translateY(-18px) scale(1.02); }
 }
 
 .view-caption {
@@ -399,6 +451,10 @@ h1 {
   box-shadow: 0 8px 18px rgba(79, 207, 255, 0.25);
 }
 
+.primary-btn:active {
+  transform: scale(0.97);
+}
+
 .action-btn {
   margin-top: 6px;
   color: var(--text);
@@ -454,6 +510,24 @@ h1 {
 
 @keyframes pulseReady {
   50% { transform: scale(1.02); box-shadow: 0 0 0 6px rgba(111, 232, 255, 0.15); }
+}
+
+.primary-btn.boost-fire {
+  animation: boostFire 360ms ease-out;
+}
+
+@keyframes boostFire {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(111, 232, 255, 0.35); }
+  45% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(111, 232, 255, 0.08); }
+  100% { transform: scale(1); box-shadow: 0 8px 18px rgba(79, 207, 255, 0.25); }
+}
+
+.factory-view.boosted .machine.active {
+  box-shadow: 0 0 16px rgba(121, 200, 255, 0.45);
+}
+
+.factory-view.boosted .belt {
+  filter: brightness(1.18);
 }
 
 .section-card h2 {
