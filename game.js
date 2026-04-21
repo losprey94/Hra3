@@ -486,6 +486,8 @@ function renderHUD() {
   } else {
     el.modifierBanner.style.display = "none";
   }
+
+  updateMachineActivity();
 }
 
 function renderFactory() {
@@ -557,19 +559,32 @@ function renderBlueprints() {
 
 function bootstrapFactoryVisual() {
   const machinePos = {
-    cutter: { x: 12, y: 80 },
-    furnace: { x: 100, y: 36 },
-    assembler: { x: 186, y: 80 },
-    qc: { x: 278, y: 36 },
-    pack: { x: 360, y: 80 }
+    cutter: { x: 12, y: 138, stage: "Frame Cut" },
+    furnace: { x: 100, y: 64, stage: "Glass Forge" },
+    assembler: { x: 186, y: 138, stage: "Panel Fit" },
+    qc: { x: 278, y: 64, stage: "QC Scan" },
+    pack: { x: 360, y: 138, stage: "Pack Out" }
   };
 
-  const belts = [
-    { x: 74, y: 103, w: 30 },
-    { x: 162, y: 60, w: 30 },
-    { x: 248, y: 103, w: 30 },
-    { x: 340, y: 60, w: 30 }
+  const lanes = [
+    { y: 86, text: "Glass line" },
+    { y: 160, text: "Frame line" }
   ];
+
+  const belts = [
+    { x: 74, y: 160, w: 30 },
+    { x: 162, y: 86, w: 30 },
+    { x: 248, y: 160, w: 30 },
+    { x: 340, y: 86, w: 30 }
+  ];
+
+  lanes.forEach((lane) => {
+    const line = document.createElement("div");
+    line.className = "line-separator";
+    line.style.top = `${lane.y}px`;
+    line.innerHTML = `<span>${lane.text}</span>`;
+    el.factoryGrid.appendChild(line);
+  });
 
   Object.entries(machinePos).forEach(([id, p]) => {
     const m = document.createElement("div");
@@ -577,7 +592,7 @@ function bootstrapFactoryVisual() {
     m.id = `machine-${id}`;
     m.style.left = `${p.x}px`;
     m.style.top = `${p.y}px`;
-    m.innerHTML = `<span class="lamp"></span>${lineDefs.find((l) => l.id === id).name}`;
+    m.innerHTML = `<span class="lamp"></span><span class="stamp"></span><span class="stage">${p.stage}</span>`;
     el.factoryGrid.appendChild(m);
   });
 
@@ -594,14 +609,30 @@ function bootstrapFactoryVisual() {
 function animateFlow() {
   const activeLines = lineDefs.filter((l) => state.lines[l.id].level > 0).length;
   if (!activeLines) return;
-  for (let i = 0; i < Math.min(4, activeLines); i += 1) {
+  const links = [
+    { from: { x: 70, y: 162 }, to: { x: 104, y: 88 }, type: "frame-part" },
+    { from: { x: 158, y: 88 }, to: { x: 190, y: 162 }, type: "glass-part" },
+    { from: { x: 246, y: 162 }, to: { x: 282, y: 88 }, type: "window-assembly" },
+    { from: { x: 338, y: 88 }, to: { x: 372, y: 162 }, type: "finished-window" }
+  ];
+
+  links.slice(0, Math.min(4, activeLines)).forEach((path) => {
     const item = document.createElement("div");
-    item.className = `item window ${Math.random() < 0.35 ? "frame" : ""}`;
-    item.style.left = `${65 + i * 84}px`;
-    item.style.top = `${Math.random() < 0.5 ? 56 : 98}px`;
+    item.className = `item ${path.type}`;
+    item.style.left = `${path.from.x}px`;
+    item.style.top = `${path.from.y}px`;
     el.factoryGrid.appendChild(item);
-    setTimeout(() => item.remove(), 1200);
-  }
+    item.animate(
+      [
+        { transform: "translate(0,0) scale(0.94)", opacity: 0 },
+        { transform: "translate(0,0) scale(1)", opacity: 1, offset: 0.1 },
+        { transform: `translate(${path.to.x - path.from.x}px, ${path.to.y - path.from.y}px) scale(1)`, opacity: 1, offset: 0.85 },
+        { transform: `translate(${path.to.x - path.from.x}px, ${path.to.y - path.from.y}px) scale(0.96)`, opacity: 0 }
+      ],
+      { duration: 980, easing: "linear" }
+    );
+    setTimeout(() => item.remove(), 1000);
+  });
 }
 
 function flashMachine(lineId) {
@@ -609,6 +640,18 @@ function flashMachine(lineId) {
   if (!m) return;
   m.classList.add("busy");
   setTimeout(() => m.classList.remove("busy"), 400);
+}
+
+function updateMachineActivity() {
+  lineDefs.forEach((line) => {
+    const node = document.getElementById(`machine-${line.id}`);
+    if (!node) return;
+    if (state.lines[line.id].level > 0) {
+      node.classList.add("active");
+    } else {
+      node.classList.remove("active");
+    }
+  });
 }
 
 function toast(msg) {

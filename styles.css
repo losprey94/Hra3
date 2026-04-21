@@ -158,6 +158,29 @@ h1 {
   margin-bottom: 12px;
 }
 
+.factory-view::before,
+.factory-view::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.factory-view::before {
+  background: linear-gradient(180deg, rgba(111, 153, 207, 0.08), rgba(0, 0, 0, 0.18));
+  z-index: 1;
+}
+
+.factory-view::after {
+  background: repeating-linear-gradient(
+    -15deg,
+    rgba(80, 106, 145, 0.07) 0 18px,
+    rgba(16, 26, 42, 0.04) 18px 36px
+  );
+  opacity: 0.6;
+  z-index: 2;
+}
+
 .factory-bg-layer {
   position: absolute;
   inset: 0;
@@ -166,6 +189,7 @@ h1 {
     linear-gradient(90deg, rgba(115, 157, 207, 0.09) 1px, transparent 1px);
   background-size: 24px 24px;
   animation: pulseGrid 5s ease-in-out infinite;
+  z-index: 0;
 }
 
 @keyframes pulseGrid {
@@ -176,12 +200,13 @@ h1 {
 .factory-grid {
   position: absolute;
   inset: 0;
+  z-index: 3;
 }
 
 .machine {
   position: absolute;
-  width: 70px;
-  height: 52px;
+  width: 74px;
+  height: 54px;
   border-radius: 10px;
   border: 1px solid #43689d;
   background: linear-gradient(180deg, #2a466e, #1a2e48);
@@ -190,6 +215,7 @@ h1 {
   justify-content: center;
   font-size: 0.65rem;
   text-align: center;
+  overflow: hidden;
 }
 
 .machine .lamp {
@@ -203,10 +229,40 @@ h1 {
   box-shadow: 0 0 8px #8ce9ff;
 }
 
+.machine .stage {
+  position: absolute;
+  bottom: 6px;
+  left: 0;
+  right: 0;
+  font-size: 0.55rem;
+  color: #d6e7ff;
+}
+
+.machine .stamp {
+  width: 22px;
+  height: 8px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #7396c9, #47688f);
+  transform: translateY(-6px);
+}
+
+.machine.active {
+  border-color: #79c8ff;
+  box-shadow: 0 0 12px rgba(102, 207, 255, 0.28);
+}
+
+.machine.active .stamp {
+  animation: stampMove 1.2s ease-in-out infinite;
+}
+
 .machine.busy { animation: throb 0.45s ease; }
 
 @keyframes throb {
   50% { transform: scale(1.05); }
+}
+
+@keyframes stampMove {
+  50% { transform: translateY(0px); }
 }
 
 .belt {
@@ -219,26 +275,60 @@ h1 {
 
 .item {
   position: absolute;
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+.item.frame-part {
+  width: 18px;
+  height: 12px;
+  border: 2px solid #cda56f;
+  background: rgba(80, 54, 22, 0.45);
+}
+
+.item.glass-part {
+  width: 16px;
+  height: 11px;
+  border: 1px solid #9ce7ff;
+  background: linear-gradient(180deg, rgba(129, 225, 255, 0.45), rgba(82, 156, 219, 0.6));
+}
+
+.item.window-assembly {
+  width: 18px;
+  height: 13px;
+  border: 1px solid #89d0ff;
+  background:
+    linear-gradient(90deg, #7f5e2a 0 18%, #9edffb 18% 82%, #7f5e2a 82%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.2), transparent);
+}
+
+.item.finished-window {
   width: 20px;
   height: 14px;
-  border-radius: 3px;
-  border: 1px solid #8ac8ff;
-  background: linear-gradient(90deg, #4ba9e8 0 45%, #9ee3ff 45% 55%, #4ba9e8 55%);
-  opacity: 0;
+  border: 1px solid #cfeeff;
+  background:
+    linear-gradient(90deg, #8f6b37 0 14%, #b1ecff 14% 86%, #8f6b37 86%),
+    radial-gradient(circle at 65% 35%, rgba(255, 255, 255, 0.4), transparent 55%);
+  box-shadow: 0 0 8px rgba(146, 227, 255, 0.45);
 }
 
-.item.frame {
-  border-color: #f7d37f;
-  background: linear-gradient(90deg, #7f5e2a, #caa56b, #7f5e2a);
+.line-separator {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  border-top: 1px dashed rgba(98, 132, 179, 0.45);
+  pointer-events: none;
 }
 
-.item.window { animation: flow 1.2s linear forwards; }
-
-@keyframes flow {
-  0% { opacity: 0; transform: translateX(0); }
-  5% { opacity: 1; }
-  90% { opacity: 1; }
-  100% { opacity: 0; transform: translateX(220px); }
+.line-separator span {
+  position: absolute;
+  top: -8px;
+  right: 2px;
+  font-size: 0.58rem;
+  color: rgba(164, 194, 231, 0.8);
+  background: rgba(18, 31, 50, 0.88);
+  padding: 1px 5px;
+  border-radius: 999px;
 }
 
 .ticker {
@@ -251,6 +341,7 @@ h1 {
   border: 1px solid #3f5b82;
   font-weight: 700;
   color: var(--accent2);
+  z-index: 4;
 }
 
 .view-caption {
@@ -263,6 +354,7 @@ h1 {
   border-radius: 999px;
   padding: 3px 7px;
   background: rgba(20, 33, 52, 0.75);
+  z-index: 4;
 }
 
 .modifier-banner {
@@ -276,6 +368,7 @@ h1 {
   background: rgba(118, 66, 40, 0.7);
   border: 1px solid rgba(255, 169, 128, 0.8);
   display: none;
+  z-index: 4;
 }
 
 .card {
