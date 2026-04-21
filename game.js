@@ -3,71 +3,71 @@ const SAVE_KEY = "window_factory_tycoon_v1";
 const RESOURCES = ["cash", "research", "reputation", "parts", "tokens"];
 
 const lineDefs = [
-  { id: "cutter", name: "Frame Cutter", baseCost: 40, baseRate: 0.25, icon: "🪚" },
-  { id: "furnace", name: "Glass Furnace", baseCost: 120, baseRate: 0.45, icon: "🔥" },
-  { id: "assembler", name: "Assembly Robot", baseCost: 360, baseRate: 0.7, icon: "🤖" },
-  { id: "qc", name: "Quality Scanner", baseCost: 900, baseRate: 1.0, icon: "🔍" },
-  { id: "pack", name: "Packaging Bay", baseCost: 2200, baseRate: 1.35, icon: "📦" }
+  { id: "cutter", name: "Frame Cutter", baseCost: 45, baseRate: 0.22, icon: "🪚", unlockReq: null },
+  { id: "furnace", name: "Glass Furnace", baseCost: 220, baseRate: 0.34, icon: "🔥", unlockReq: { line: "cutter", level: 8 } },
+  { id: "assembler", name: "Assembly Robot", baseCost: 850, baseRate: 0.48, icon: "🤖", unlockReq: { line: "furnace", level: 6 } },
+  { id: "qc", name: "Quality Scanner", baseCost: 3200, baseRate: 0.66, icon: "🔍", unlockReq: { line: "assembler", level: 6 } },
+  { id: "pack", name: "Packaging Bay", baseCost: 12000, baseRate: 0.9, icon: "📦", unlockReq: { line: "qc", level: 5 } }
 ];
 
 const divisionDefs = [
-  { id: "residential", name: "Residential Unit", reqCash: 300, bonus: 0.12 },
-  { id: "commercial", name: "Commercial Unit", reqCash: 2500, bonus: 0.2 },
-  { id: "smartglass", name: "SmartGlass Unit", reqCash: 12500, bonus: 0.32 },
-  { id: "aeroshield", name: "AeroShield Lab", reqCash: 70000, bonus: 0.5 }
+  { id: "residential", name: "Residential Unit", reqCash: 600, bonus: 0.08 },
+  { id: "commercial", name: "Commercial Unit", reqCash: 4800, bonus: 0.12 },
+  { id: "smartglass", name: "SmartGlass Unit", reqCash: 26000, bonus: 0.18 },
+  { id: "aeroshield", name: "AeroShield Lab", reqCash: 145000, bonus: 0.24 }
 ];
 
 const contracts = [
-  { id: "starter", name: "Neighborhood Retrofit", type: "Standard", duration: 120, windows: 70, minRep: 0, rewards: { cash: 180, rep: 3, parts: 4 } },
-  { id: "green", name: "Eco Tower Fitout", type: "Efficiency", duration: 300, windows: 260, minRep: 8, rewards: { cash: 900, rep: 7, research: 12 } },
-  { id: "airport", name: "Airport Terminal Rush", type: "Rush", duration: 480, windows: 540, minRep: 20, rewards: { cash: 2400, rep: 12, parts: 20 } },
-  { id: "lux", name: "Luxury Skyline Contract", type: "Premium", duration: 900, windows: 1400, minRep: 35, rewards: { cash: 7200, rep: 20, research: 36, parts: 32 } }
+  { id: "starter", name: "Neighborhood Retrofit", type: "Standard", duration: 150, windows: 85, minRep: 0, rewards: { cash: 135, rep: 2, parts: 3 } },
+  { id: "green", name: "Eco Tower Fitout", type: "Efficiency", duration: 330, windows: 285, minRep: 8, rewards: { cash: 620, rep: 5, research: 7 } },
+  { id: "airport", name: "Airport Terminal Rush", type: "Rush", duration: 520, windows: 620, minRep: 22, rewards: { cash: 1700, rep: 9, parts: 12 } },
+  { id: "lux", name: "Luxury Skyline Contract", type: "Premium", duration: 960, windows: 1550, minRep: 38, rewards: { cash: 5000, rep: 14, research: 20, parts: 20 } }
 ];
 
 const skillDefs = [
   [
-    { id: "prod1", name: "Line Tuning", branch: "Production", cost: 4, effect: () => state.modifiers.prod += 0.08 },
-    { id: "prod2", name: "Crossfeed Pipes", branch: "Production", cost: 6, effect: () => state.modifiers.prod += 0.11 },
-    { id: "prodK", name: "Keystone: Continuous Casting", branch: "Production", keystone: true, cost: 14, effect: () => state.flags.continuousCasting = true }
+    { id: "prod1", name: "Line Tuning", branch: "Production", cost: 5, effect: () => state.modifiers.prod += 0.05 },
+    { id: "prod2", name: "Crossfeed Pipes", branch: "Production", cost: 8, effect: () => state.modifiers.prod += 0.07 },
+    { id: "prodK", name: "Keystone: Continuous Casting", branch: "Production", keystone: true, cost: 16, effect: () => state.flags.continuousCasting = true }
   ],
   [
-    { id: "auto1", name: "Auto Loader", branch: "Automation", cost: 5, effect: () => state.modifiers.rushDuration += 2 },
-    { id: "auto2", name: "Sensor Net", branch: "Automation", cost: 8, effect: () => state.modifiers.partsChance += 0.02 },
-    { id: "autoK", name: "Keystone: Dark Shift", branch: "Automation", keystone: true, cost: 16, effect: () => state.flags.darkShift = true }
+    { id: "auto1", name: "Auto Loader", branch: "Automation", cost: 6, effect: () => state.modifiers.rushDuration += 1.5 },
+    { id: "auto2", name: "Sensor Net", branch: "Automation", cost: 9, effect: () => state.modifiers.partsChance += 0.015 },
+    { id: "autoK", name: "Keystone: Dark Shift", branch: "Automation", keystone: true, cost: 17, effect: () => state.flags.darkShift = true }
   ],
   [
-    { id: "work1", name: "Shift Meals", branch: "Workforce", cost: 4, effect: () => state.modifiers.rushPower += 0.15 },
-    { id: "work2", name: "Safety Program", branch: "Workforce", cost: 8, effect: () => state.modifiers.quality += 0.06 },
+    { id: "work1", name: "Shift Meals", branch: "Workforce", cost: 5, effect: () => state.modifiers.rushPower += 0.12 },
+    { id: "work2", name: "Safety Program", branch: "Workforce", cost: 8, effect: () => state.modifiers.quality += 0.04 },
     { id: "workK", name: "Keystone: Union Momentum", branch: "Workforce", keystone: true, cost: 16, effect: () => state.flags.unionMomentum = true }
   ],
   [
-    { id: "qual1", name: "Optic Calibration", branch: "Quality", cost: 6, effect: () => state.modifiers.reputationGain += 0.1 },
-    { id: "qual2", name: "Defect Catchers", branch: "Quality", cost: 8, effect: () => state.modifiers.quality += 0.09 },
-    { id: "qualK", name: "Keystone: Zero-Defect Week", branch: "Quality", keystone: true, cost: 17, effect: () => state.flags.zeroDefect = true }
+    { id: "qual1", name: "Optic Calibration", branch: "Quality", cost: 6, effect: () => state.modifiers.reputationGain += 0.07 },
+    { id: "qual2", name: "Defect Catchers", branch: "Quality", cost: 10, effect: () => state.modifiers.quality += 0.06 },
+    { id: "qualK", name: "Keystone: Zero-Defect Week", branch: "Quality", keystone: true, cost: 18, effect: () => state.flags.zeroDefect = true }
   ],
   [
-    { id: "con1", name: "Client Liaison", branch: "Contracts", cost: 5, effect: () => state.modifiers.contractReward += 0.1 },
-    { id: "con2", name: "Negotiation Desk", branch: "Contracts", cost: 10, effect: () => state.modifiers.contractReward += 0.14 },
-    { id: "conK", name: "Keystone: Priority Pipeline", branch: "Contracts", keystone: true, cost: 18, effect: () => state.flags.priorityPipeline = true }
+    { id: "con1", name: "Client Liaison", branch: "Contracts", cost: 6, effect: () => state.modifiers.contractReward += 0.07 },
+    { id: "con2", name: "Negotiation Desk", branch: "Contracts", cost: 11, effect: () => state.modifiers.contractReward += 0.1 },
+    { id: "conK", name: "Keystone: Priority Pipeline", branch: "Contracts", keystone: true, cost: 20, effect: () => state.flags.priorityPipeline = true }
   ],
   [
-    { id: "eco1", name: "Bulk Purchasing", branch: "Economy", cost: 5, effect: () => state.modifiers.costDiscount += 0.04 },
-    { id: "eco2", name: "Tax Optimizer", branch: "Economy", cost: 9, effect: () => state.modifiers.cashBonus += 0.11 },
+    { id: "eco1", name: "Bulk Purchasing", branch: "Economy", cost: 6, effect: () => state.modifiers.costDiscount += 0.03 },
+    { id: "eco2", name: "Tax Optimizer", branch: "Economy", cost: 10, effect: () => state.modifiers.cashBonus += 0.07 },
     { id: "ecoK", name: "Keystone: Venture Capital", branch: "Economy", keystone: true, cost: 22, effect: () => state.flags.ventureCapital = true }
   ]
 ].flat();
 
 const blueprintDefs = [
-  { id: "bp_laminate", name: "Laminated Glass Protocol", desc: "+18% contract cash", rarity: "Rare", effect: () => state.modifiers.contractReward += 0.18 },
-  { id: "bp_hydro", name: "Hydraulic Rail Conversion", desc: "+12% global production", rarity: "Epic", effect: () => state.modifiers.prod += 0.12 },
-  { id: "bp_selfclean", name: "Self-Clean Coating", desc: "+8% reputation gain", rarity: "Rare", effect: () => state.modifiers.reputationGain += 0.08 },
+  { id: "bp_laminate", name: "Laminated Glass Protocol", desc: "+12% contract cash", rarity: "Rare", effect: () => state.modifiers.contractReward += 0.12 },
+  { id: "bp_hydro", name: "Hydraulic Rail Conversion", desc: "+8% global production", rarity: "Epic", effect: () => state.modifiers.prod += 0.08 },
+  { id: "bp_selfclean", name: "Self-Clean Coating", desc: "+6% reputation gain", rarity: "Rare", effect: () => state.modifiers.reputationGain += 0.06 },
   { id: "bp_smart", name: "Smart Tint Driver", desc: "Rush also grants Research ticks", rarity: "Legendary", effect: () => state.flags.smartTint = true }
 ];
 
 const modifierPool = [
   { id: "shortage", text: "Glass Shortage: -18% production for 3 minutes", duration: 180, prodMul: 0.82 },
   { id: "energy", text: "Energy Crisis: Rush cooldown +10s for 3 minutes", duration: 180, rushCdAdd: 10 },
-  { id: "boom", text: "Construction Boom: +25% cash for 3 minutes", duration: 180, cashMul: 1.25 }
+  { id: "boom", text: "Construction Boom: +15% cash for 3 minutes", duration: 180, cashMul: 1.15 }
 ];
 
 const defaultState = () => ({
@@ -80,7 +80,7 @@ const defaultState = () => ({
   blueprints: [],
   modifiers: {
     prod: 0,
-    rushPower: 1,
+    rushPower: 0.35,
     rushDuration: 0,
     partsChance: 0,
     quality: 0,
@@ -181,19 +181,28 @@ function gameTick() {
     if (Math.random() < 0.12) toast("Industrial part recovered.");
   }
 
-  state.resources.reputation += made * 0.002 * (1 + state.modifiers.reputationGain);
+  state.resources.reputation += made * 0.0012 * (1 + state.modifiers.reputationGain);
 
   tickContract(dt, made);
   tickModifier(now);
 
   if (now > state.rush.activeUntil && now < state.rush.cooldownUntil) {
     const rem = Math.ceil((state.rush.cooldownUntil - now) / 1000);
+    el.rushBtn.disabled = true;
+    el.rushBtn.classList.remove("ready");
+    el.rushBtn.textContent = `Recharging (${rem}s)`;
     el.rushStatus.textContent = `Rush cooldown: ${rem}s`;
   } else if (now <= state.rush.activeUntil) {
     const rem = Math.ceil((state.rush.activeUntil - now) / 1000);
+    el.rushBtn.disabled = true;
+    el.rushBtn.classList.remove("ready");
+    el.rushBtn.textContent = `Boosting (${rem}s)`;
     el.rushStatus.textContent = `Rush active (${rem}s).`;
   } else {
-    el.rushStatus.textContent = "Tap for a temporary production boost.";
+    el.rushBtn.disabled = false;
+    el.rushBtn.classList.add("ready");
+    el.rushBtn.textContent = "Boost Production";
+    el.rushStatus.textContent = "Tap to overclock lines and push your next upgrade.";
   }
 
   tickerFrame += dt;
@@ -212,38 +221,51 @@ function calcWindowsPerSec() {
   lineDefs.forEach((line) => {
     const lv = state.lines[line.id].level;
     if (lv > 0) {
-      const localBoost = 1 + lv * 0.06;
+      const localBoost = 1 + Math.sqrt(lv) * 0.045;
       wps += line.baseRate * lv * localBoost;
     }
   });
 
   const divBoost = 1 + divisionDefs.filter((d) => state.divisions[d.id]).reduce((a, d) => a + d.bonus, 0);
   const skillBoost = 1 + state.modifiers.prod;
-  const tokenBoost = 1 + state.resources.tokens * 0.05;
-  const rushBoost = Date.now() < state.rush.activeUntil ? 2 + state.modifiers.rushPower : 1;
+  const tokenBoost = 1 + state.resources.tokens * 0.025;
+  const rushBoost = Date.now() < state.rush.activeUntil ? 1.75 + state.modifiers.rushPower : 1;
 
   let modifierMul = 1;
   if (state.activeModifier && state.activeModifier.prodMul) modifierMul *= state.activeModifier.prodMul;
 
-  if (state.flags.continuousCasting) wps *= 1.1;
+  if (state.flags.continuousCasting) wps *= 1.06;
   return wps * divBoost * skillBoost * tokenBoost * rushBoost * modifierMul;
 }
 
 function cashPerWindow() {
-  let v = 4.5 * (1 + state.modifiers.cashBonus);
-  if (state.flags.ventureCapital && state.resources.cash < 2000) v *= 1.2;
+  let v = 3.2 * (1 + state.modifiers.cashBonus);
+  if (state.flags.ventureCapital && state.resources.cash < 1500) v *= 1.12;
   if (state.activeModifier && state.activeModifier.cashMul) v *= state.activeModifier.cashMul;
   return v;
 }
 
 function lineUpgradeCost(line) {
   const lv = state.lines[line.id].level;
-  const discount = 1 - Math.min(0.35, state.modifiers.costDiscount);
-  return Math.ceil(line.baseCost * Math.pow(1.34, lv) * discount);
+  const discount = 1 - Math.min(0.22, state.modifiers.costDiscount);
+  return Math.ceil(line.baseCost * Math.pow(1.43, lv) * discount);
+}
+
+function isLineUnlocked(line) {
+  if (!line.unlockReq) return true;
+  return state.lines[line.unlockReq.line].level >= line.unlockReq.level;
+}
+
+function secondsToAfford(cost) {
+  if (state.resources.cash >= cost) return 0;
+  const rps = calcWindowsPerSec() * cashPerWindow();
+  if (rps <= 0.01) return Infinity;
+  return Math.ceil((cost - state.resources.cash) / rps);
 }
 
 function buyLine(lineId) {
   const def = lineDefs.find((x) => x.id === lineId);
+  if (!isLineUnlocked(def)) return;
   const cost = lineUpgradeCost(def);
   if (state.resources.cash < cost) return;
   state.resources.cash -= cost;
@@ -265,10 +287,10 @@ function unlockDivision(id) {
 function activateRush() {
   const now = Date.now();
   if (now < state.rush.cooldownUntil) return;
-  const duration = 6000 + state.modifiers.rushDuration * 1000;
+  const duration = 5000 + state.modifiers.rushDuration * 1000;
   const cdPenalty = state.activeModifier?.rushCdAdd ? state.activeModifier.rushCdAdd * 1000 : 0;
   state.rush.activeUntil = now + duration;
-  state.rush.cooldownUntil = now + 26000 + cdPenalty;
+  state.rush.cooldownUntil = now + 32000 + cdPenalty;
   if (state.flags.smartTint) state.resources.research += 1;
   toast("Rush Order accepted! Lines overclocked.");
 }
@@ -301,15 +323,15 @@ function tickContract(dt, windowsMade) {
 
 function completeContract() {
   const c = state.contract;
-  const mult = 1 + state.modifiers.contractReward;
+  const mult = 1 + Math.min(0.45, state.modifiers.contractReward);
   state.resources.cash += (c.rewards.cash || 0) * mult;
   state.resources.parts += Math.round((c.rewards.parts || 0) * mult);
   state.resources.research += Math.round((c.rewards.research || 0) * mult);
   state.resources.reputation += (c.rewards.rep || 0) * (1 + state.modifiers.reputationGain);
 
-  if (state.flags.priorityPipeline && Math.random() < 0.18) state.resources.parts += 5;
+  if (state.flags.priorityPipeline && Math.random() < 0.14) state.resources.parts += 3;
 
-  if (Math.random() < 0.1 + state.completedContracts * 0.003) {
+  if (Math.random() < Math.min(0.22, 0.07 + state.completedContracts * 0.002)) {
     awardBlueprint();
   }
 
@@ -339,24 +361,24 @@ function buySkill(skillId) {
 }
 
 function convertResearch() {
-  const spend = Math.min(state.resources.cash, 500);
-  if (spend < 100) {
-    toast("Need at least $100 cash to run research.");
+  const spend = Math.min(state.resources.cash, 480);
+  if (spend < 80) {
+    toast("Need at least $80 cash to run research.");
     return;
   }
-  const gain = Math.floor(spend / 100) + (state.flags.darkShift ? 1 : 0);
+  const gain = Math.min(3, Math.floor(spend / 160)) + (state.flags.darkShift ? 1 : 0);
   state.resources.cash -= spend;
   state.resources.research += gain;
   toast(`R&D yielded ${gain} research points.`);
 }
 
 function modernizationCost() {
-  return 50000 * (1 + state.modernizationCount * 0.55);
+  return 90000 * Math.pow(1.7, state.modernizationCount);
 }
 
 function calcModernizationReward() {
-  const score = state.totalEarned / 20000 + state.completedContracts * 0.8 + state.resources.reputation * 0.1;
-  return Math.floor(Math.sqrt(score));
+  const score = state.totalEarned / 120000 + state.completedContracts * 0.2 + state.resources.reputation * 0.05;
+  return Math.max(0, Math.floor(Math.pow(score, 0.72)));
 }
 
 function tryModernize() {
@@ -447,8 +469,15 @@ function renderHUD() {
   el.rpsLabel.textContent = `$${fmt(calcWindowsPerSec() * cashPerWindow())}`;
   el.wpsLabel.textContent = fmt(calcWindowsPerSec());
 
-  const nextLine = lineDefs.find((l) => lineUpgradeCost(l) <= state.resources.cash) || lineDefs[0];
-  el.goalLabel.textContent = `Goal: Upgrade ${nextLine.name} (Cost $${fmt(lineUpgradeCost(nextLine))})`;
+  const goalTarget = lineDefs
+    .map((line) => ({ line, cost: lineUpgradeCost(line), unlocked: isLineUnlocked(line) }))
+    .sort((a, b) => {
+      if (a.unlocked !== b.unlocked) return a.unlocked ? -1 : 1;
+      return a.cost - b.cost;
+    })[0];
+  const eta = secondsToAfford(goalTarget.cost);
+  const etaLabel = eta === 0 ? "Affordable now" : (eta === Infinity ? "Build income first" : `~${fmt(eta)}s to afford`);
+  el.goalLabel.textContent = `Goal: ${goalTarget.line.name} $${fmt(goalTarget.cost)} (${etaLabel})`;
 
   if (state.activeModifier) {
     const sec = Math.max(0, Math.ceil((state.modifierUntil - Date.now()) / 1000));
@@ -464,7 +493,11 @@ function renderFactory() {
     const lv = state.lines[line.id].level;
     const cost = lineUpgradeCost(line);
     const active = lv > 0;
-    return `<div class="row"><div class="row-head"><strong>${line.icon} ${line.name}</strong><span>Lv ${lv}</span></div><div class="row-meta"><span>${active ? `${fmt(line.baseRate * lv * (1 + lv * 0.06))} w/s raw` : "Locked"}</span><span>Cost $${fmt(cost)}</span></div><button class="action-btn" data-line="${line.id}">${active ? "Upgrade" : "Activate"}</button></div>`;
+    const unlocked = isLineUnlocked(line);
+    const eta = secondsToAfford(cost);
+    const affordText = state.resources.cash >= cost ? "Ready" : (eta === Infinity ? "Grow income" : `${fmt(eta)}s`);
+    const reqText = unlocked || !line.unlockReq ? "" : `Needs ${lineDefs.find((x) => x.id === line.unlockReq.line).name} Lv ${line.unlockReq.level}`;
+    return `<div class="row"><div class="row-head"><strong>${line.icon} ${line.name}</strong><span>Lv ${lv}</span></div><div class="row-meta"><span>${active ? `${fmt(line.baseRate * lv * (1 + Math.sqrt(lv) * 0.045))} w/s raw` : "Locked"}</span><span>Cost $${fmt(cost)}</span></div><div class="row-meta"><span>${reqText || "Unlocked"}</span><span>${affordText}</span></div><button class="action-btn" data-line="${line.id}" ${(!unlocked || state.resources.cash < cost) ? "disabled" : ""}>${active ? "Upgrade" : "Activate"}</button></div>`;
   }).join("");
 
   el.lineList.querySelectorAll("button[data-line]").forEach((btn) => btn.addEventListener("click", () => buyLine(btn.dataset.line)));
@@ -488,11 +521,11 @@ function renderContracts() {
     el.activeContract.innerHTML = `<div class="row"><div class="row-head"><strong>No active contract</strong><span>Idle</span></div><div class="row-meta"><span>Select one below.</span><span></span></div></div>`;
   }
 
-  const tierBoost = Math.floor(state.completedContracts / 5);
+  const tierBoost = Math.floor(state.completedContracts / 4);
   el.contractList.innerHTML = contracts.map((c) => {
     const lock = state.resources.reputation < c.minRep;
-    const need = Math.ceil(c.windows * (1 + tierBoost * 0.18));
-    const rewardCash = Math.ceil(c.rewards.cash * (1 + tierBoost * 0.14));
+    const need = Math.ceil(c.windows * (1 + tierBoost * 0.22));
+    const rewardCash = Math.ceil(c.rewards.cash * (1 + tierBoost * 0.09));
     return `<div class="row"><div class="row-head"><strong>${c.name}</strong><span>${c.type}</span></div><div class="row-meta"><span>Need ${need} windows in ${c.duration}s</span><span>Rep ${c.minRep.toFixed(0)}</span></div><div class="row-meta"><span>Reward: $${fmt(rewardCash)} + extras</span><span>${lock ? "Locked" : "Ready"}</span></div>${!lock && !state.contract ? `<button class="action-btn" data-contract="${c.id}">Start</button>` : ""}</div>`;
   }).join("");
 

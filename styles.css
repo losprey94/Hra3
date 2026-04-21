@@ -50,7 +50,7 @@ h1 {
 .goal {
   margin: 2px 0 0;
   font-size: 0.75rem;
-  color: var(--accent2);
+  color: var(--sub);
 }
 
 .menu-btn {
@@ -88,7 +88,50 @@ h1 {
 }
 
 .screen-container {
-  padding: 0 12px 8px;
+  padding: 0 12px 10px;
+}
+
+.hero-panel {
+  background: linear-gradient(180deg, rgba(29, 48, 75, 0.95), rgba(19, 31, 51, 0.95));
+  border: 1px solid #3c5a84;
+  border-radius: 16px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
+.hero-revenue {
+  text-align: center;
+}
+
+.hero-label {
+  margin: 0;
+  color: var(--sub);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+
+.hero-revenue h2 {
+  margin: 2px 0;
+  font-size: 1.9rem;
+  line-height: 1;
+  color: #baf8ff;
+}
+
+.hero-sub {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #9bd5e7;
+}
+
+.goal-chip {
+  margin-top: 10px;
+  border: 1px solid #4b6e9a;
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: rgba(14, 23, 39, 0.55);
+  color: var(--accent2);
+  font-size: 0.79rem;
+  font-weight: 600;
 }
 
 .screen {
@@ -107,12 +150,12 @@ h1 {
 
 .factory-view {
   position: relative;
-  height: 300px;
+  height: 280px;
   border-radius: 16px;
   border: 1px solid #2e4366;
   overflow: hidden;
   background: linear-gradient(180deg, #1b2942, #121c30);
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .factory-bg-layer {
@@ -210,6 +253,18 @@ h1 {
   color: var(--accent2);
 }
 
+.view-caption {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font-size: 0.7rem;
+  color: #9cb4d6;
+  border: 1px solid #3f5b82;
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: rgba(20, 33, 52, 0.75);
+}
+
 .modifier-banner {
   position: absolute;
   bottom: 10px;
@@ -231,21 +286,24 @@ h1 {
   margin-bottom: 10px;
 }
 
-.income-line {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 8px;
-  font-size: 0.9rem;
+.action-dock {
+  background: rgba(23, 34, 53, 0.96);
+  border: 1px solid #3c567f;
+  border-radius: 16px;
+  padding: 10px;
+  margin-bottom: 6px;
 }
 
 .primary-btn, .action-btn {
   width: 100%;
   border: 0;
-  border-radius: 12px;
-  padding: 10px;
+  border-radius: 14px;
+  padding: 15px 10px;
   font-weight: 700;
+  font-size: 1.02rem;
   color: #07263d;
   background: linear-gradient(180deg, #75e6ff, #4fcfff);
+  box-shadow: 0 8px 18px rgba(79, 207, 255, 0.25);
 }
 
 .action-btn {
@@ -255,10 +313,54 @@ h1 {
   border: 1px solid #486991;
 }
 
+.action-btn:disabled {
+  opacity: 0.45;
+  filter: grayscale(0.3);
+}
+
+.primary-btn:disabled {
+  opacity: 0.55;
+}
+
 .subtext {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   color: var(--sub);
-  font-size: 0.75rem;
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.dock-meta {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.dock-meta div {
+  border: 1px solid #425f88;
+  border-radius: 10px;
+  padding: 7px;
+  background: #1e2d46;
+}
+
+.dock-meta p {
+  margin: 0;
+  font-size: 0.67rem;
+  color: var(--sub);
+}
+
+.dock-meta strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.76rem;
+}
+
+.primary-btn.ready {
+  animation: pulseReady 1.15s ease-in-out infinite;
+}
+
+@keyframes pulseReady {
+  50% { transform: scale(1.02); box-shadow: 0 0 0 6px rgba(111, 232, 255, 0.15); }
 }
 
 .section-card h2 {

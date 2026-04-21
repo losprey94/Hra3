@@ -11,7 +11,7 @@
     <header class="topbar">
       <div class="title-wrap">
         <h1>Window Factory Tycoon</h1>
-        <p id="goalLabel" class="goal">Goal: Upgrade the Cutter to Lv 2</p>
+        <p class="goal">Factory Command</p>
       </div>
       <button id="menuButton" class="menu-btn">☰</button>
     </header>
@@ -20,24 +20,36 @@
 
     <main class="screen-container">
       <section id="screen-home" class="screen active">
+        <div class="hero-panel">
+          <div class="hero-revenue">
+            <p class="hero-label">Factory Revenue</p>
+            <h2 id="rpsLabel">$0</h2>
+            <p class="hero-sub">per second • <span id="wpsLabel">0</span> windows/sec</p>
+          </div>
+          <div class="goal-chip" id="goalLabel">Goal: Upgrade the Cutter to Lv 2</div>
+        </div>
+
         <div class="factory-view">
           <div class="factory-bg-layer"></div>
           <div class="factory-grid" id="factoryGrid"></div>
           <div class="ticker" id="incomeTicker">+$0</div>
           <div class="modifier-banner" id="modifierBanner"></div>
+          <div class="view-caption">Production Floor</div>
         </div>
 
-        <div class="home-actions card">
-          <div class="income-line">
-            <span>Revenue / sec</span>
-            <strong id="rpsLabel">$0</strong>
-          </div>
-          <div class="income-line">
-            <span>Windows / sec</span>
-            <strong id="wpsLabel">0</strong>
-          </div>
-          <button id="rushBtn" class="primary-btn">Rush Order</button>
+        <div class="action-dock">
+          <button id="rushBtn" class="primary-btn">Boost Production</button>
           <p id="rushStatus" class="subtext">Tap for a temporary production boost.</p>
+          <div class="dock-meta">
+            <div>
+              <p>Rush Impact</p>
+              <strong>High Short Burst</strong>
+            </div>
+            <div>
+              <p>Best For</p>
+              <strong>New Upgrades</strong>
+            </div>
+          </div>
         </div>
       </section>
 
