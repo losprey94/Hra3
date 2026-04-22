@@ -135,6 +135,7 @@ let goalReadyLastTick = false;
 let hudCache = { resources: "", rps: "", wps: "", goal: "", cash: "" };
 let activeModal = "";
 let fpsFrameSkip = 0;
+let drawerOpen = false;
 
 const el = {
   resourceStrip: document.getElementById("resourceStrip"),
@@ -157,6 +158,8 @@ const el = {
   fxLayer: document.getElementById("fxLayer"),
   toastLayer: document.getElementById("toastLayer"),
   sideMenu: document.getElementById("sideMenu"),
+  closeMenuBtn: document.getElementById("closeMenuBtn"),
+  drawerOverlay: document.getElementById("drawerOverlay"),
   modalLayer: document.getElementById("modalLayer"),
   modifierBanner: document.getElementById("modifierBanner")
 };
@@ -204,7 +207,9 @@ function bindEvents() {
   });
 
   document.getElementById("rushBtn")?.addEventListener("click", activateRush);
-  document.getElementById("menuButton")?.addEventListener("click", () => el.sideMenu?.classList.toggle("open"));
+  document.getElementById("menuButton")?.addEventListener("click", toggleDrawer);
+  el.closeMenuBtn?.addEventListener("click", () => setDrawerOpen(false));
+  el.drawerOverlay?.addEventListener("click", () => setDrawerOpen(false));
 
   document.getElementById("researchBtn")?.addEventListener("click", convertResearch);
   document.getElementById("prestigeBtn")?.addEventListener("click", openModernizationHub);
@@ -220,8 +225,23 @@ function bindEvents() {
     if (e.target === el.modalLayer) closeModal();
   });
   document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && drawerOpen) setDrawerOpen(false);
     if (e.key === "Escape" && !el.modalLayer.classList.contains("hidden")) closeModal();
   });
+}
+
+function toggleDrawer() {
+  setDrawerOpen(!drawerOpen);
+}
+
+function setDrawerOpen(open) {
+  drawerOpen = !!open;
+  if (el.sideMenu) {
+    el.sideMenu.classList.toggle("open", drawerOpen);
+    el.sideMenu.setAttribute("aria-hidden", drawerOpen ? "false" : "true");
+  }
+  el.drawerOverlay?.classList.toggle("open", drawerOpen);
+  document.body.classList.toggle("drawer-open", drawerOpen);
 }
 
 function gameTick() {
@@ -552,6 +572,7 @@ function buyModernizationUpgrade(key) {
 }
 
 function openModernizationHub() {
+  setDrawerOpen(false);
   const upgrades = [
     { key: "kickstart", name: "Kickstart Capital", desc: "+$40 starting cash per level" },
     { key: "contractMastery", name: "Contract Mastery", desc: "+4% contract rewards per level" },
@@ -587,6 +608,7 @@ function openModernizationHub() {
 }
 
 function hardReset() {
+  setDrawerOpen(false);
   openModal(`<h3>Hard Reset</h3><p>This wipes everything, including tokens.</p><button id="confirmReset" class="action-btn">Reset Save</button>`);
   document.getElementById("confirmReset").addEventListener("click", () => {
     localStorage.removeItem(SAVE_KEY);
@@ -616,6 +638,7 @@ function tickModifier(now) {
 }
 
 function showStats() {
+  setDrawerOpen(false);
   openModal(`
     <h3>Factory Stats</h3>
     <p>Total Earned: $${fmt(state.totalEarned)}</p>
@@ -949,7 +972,7 @@ function applyOfflineEarnings() {
 
 function openSettingsPanel() {
   activeModal = "settings";
-  el.sideMenu?.classList.remove("open");
+  setDrawerOpen(false);
   const s = state.settings;
   openModal(`
     <div class="settings-head"><h3>Settings</h3><button id="settingsClose" class="menu-btn">✕</button></div>
