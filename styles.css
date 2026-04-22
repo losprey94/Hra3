@@ -738,6 +738,9 @@ body.modernize-flash::after {
 .skill-branches {
   display: grid;
   gap: 10px;
+  max-height: 62vh;
+  overflow: auto;
+  padding-right: 2px;
 }
 
 .branch {
@@ -760,6 +763,8 @@ body.modernize-flash::after {
   border: 1px solid #4a6a95;
   font-size: 0.7rem;
   background: #253858;
+  text-align: left;
+  min-width: 140px;
 }
 
 .node.affordable {
@@ -767,8 +772,22 @@ body.modernize-flash::after {
   box-shadow: 0 0 0 1px rgba(126, 227, 176, 0.3);
 }
 
+.node.small {
+  border-color: #5f8dc2;
+}
+
+.node.medium {
+  border-color: #6a9fd8;
+}
+
+.node.notable {
+  border-color: #8db9ff;
+  box-shadow: 0 0 0 1px rgba(141, 185, 255, 0.25);
+}
+
 .node.keystone {
   border-color: var(--gold);
+  background: linear-gradient(180deg, #3a3445, #2a2638);
 }
 
 .node.owned {
