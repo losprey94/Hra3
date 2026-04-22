@@ -18,10 +18,11 @@ const divisionDefs = [
 ];
 
 const contracts = [
-  { id: "starter", name: "Neighborhood Retrofit", type: "Standard", duration: 160, windows: 95, minRep: 0, rewards: { cash: 110, rep: 2, parts: 2 } },
-  { id: "green", name: "Eco Tower Fitout", type: "Efficiency", duration: 360, windows: 320, minRep: 10, rewards: { cash: 480, rep: 4, research: 5 } },
-  { id: "airport", name: "Airport Terminal Rush", type: "Rush", duration: 560, windows: 700, minRep: 24, rewards: { cash: 1300, rep: 7, parts: 9 } },
-  { id: "lux", name: "Luxury Skyline Contract", type: "Premium", duration: 1020, windows: 1760, minRep: 42, rewards: { cash: 3900, rep: 11, research: 15, parts: 16 } }
+  { id: "starter", name: "Neighborhood Retrofit", type: "Standard", duration: 160, windows: 95, minRep: 0, failRep: 2, rewards: { cash: 110, rep: 2, parts: 2 } },
+  { id: "green", name: "Eco Tower Fitout", type: "Efficiency", duration: 360, windows: 320, minRep: 10, failRep: 3, rewards: { cash: 480, rep: 4, research: 5 }, special: "research_bonus" },
+  { id: "airport", name: "Airport Terminal Rush", type: "Rush", duration: 560, windows: 700, minRep: 24, failRep: 4, rewards: { cash: 1300, rep: 7, parts: 9 }, special: "rush_bonus" },
+  { id: "fragile", name: "Fragile Glass Emergency", type: "Risky", duration: 420, windows: 560, minRep: 28, failRep: 8, rewards: { cash: 1900, rep: 5, parts: 6 }, special: "risky_parts" },
+  { id: "lux", name: "Luxury Skyline Contract", type: "Premium", duration: 1020, windows: 1760, minRep: 42, failRep: 6, rewards: { cash: 3900, rep: 11, research: 15, parts: 16 }, special: "blueprint_chance" }
 ];
 
 const skillDefs = [
@@ -75,6 +76,7 @@ const defaultState = () => ({
   lines: Object.fromEntries(lineDefs.map((l) => [l.id, { level: l.id === "cutter" ? 1 : 0 }])),
   divisions: Object.fromEntries(divisionDefs.map((d) => [d.id, false])),
   contract: null,
+  contractContext: { rushUsed: false },
   completedContracts: 0,
   skills: [],
   blueprints: [],
@@ -106,7 +108,13 @@ const defaultState = () => ({
   lastTick: Date.now(),
   savedAt: Date.now(),
   playtime: 0,
-  modernizationCount: 0
+  modernizationCount: 0,
+  metaUpgrades: {
+    kickstart: 0,
+    contractMastery: 0,
+    offlineLab: 0,
+    blueprintIntel: 0
+  }
 });
 
 let state = loadState();
@@ -184,7 +192,7 @@ function bindEvents() {
   document.getElementById("menuButton")?.addEventListener("click", () => el.sideMenu?.classList.toggle("open"));
 
   document.getElementById("researchBtn")?.addEventListener("click", convertResearch);
-  document.getElementById("prestigeBtn")?.addEventListener("click", tryModernize);
+  document.getElementById("prestigeBtn")?.addEventListener("click", openModernizationHub);
   document.getElementById("statsBtn")?.addEventListener("click", showStats);
   document.getElementById("saveBtn")?.addEventListener("click", () => {
     autoSave();
@@ -265,24 +273,28 @@ function calcWindowsPerSec() {
   const skillBoost = 1 + state.modifiers.prod;
   const tokenBoost = 1 + state.resources.tokens * 0.018;
   const rushBoost = Date.now() < state.rush.activeUntil ? 1.55 + state.modifiers.rushPower : 1;
+  const kickoffBoost = 1 + state.metaUpgrades.kickstart * 0.015;
 
   let modifierMul = 1;
   if (state.activeModifier && state.activeModifier.prodMul) modifierMul *= state.activeModifier.prodMul;
 
-  if (state.flags.continuousCasting) wps *= 1.04;
-  return wps * divBoost * skillBoost * tokenBoost * rushBoost * modifierMul;
+  if (state.flags.continuousCasting) wps *= 1.12;
+  if (state.flags.zeroDefect) wps *= 0.95;
+  return wps * divBoost * skillBoost * tokenBoost * rushBoost * modifierMul * kickoffBoost;
 }
 
 function cashPerWindow() {
   let v = 2.7 * (1 + state.modifiers.cashBonus);
   if (state.flags.ventureCapital && state.resources.cash < 1200) v *= 1.08;
+  if (state.flags.priorityPipeline) v *= 0.94;
   if (state.activeModifier && state.activeModifier.cashMul) v *= state.activeModifier.cashMul;
   return v;
 }
 
 function lineUpgradeCost(line) {
   const lv = state.lines[line.id].level;
-  const discount = 1 - Math.min(0.18, state.modifiers.costDiscount);
+  let discount = 1 - Math.min(0.18, state.modifiers.costDiscount);
+  if (state.flags.unionMomentum) discount *= 1.04;
   return Math.ceil(line.baseCost * Math.pow(1.47, lv) * discount);
 }
 
@@ -335,7 +347,9 @@ function activateRush() {
   const duration = 5000 + state.modifiers.rushDuration * 1000;
   const cdPenalty = state.activeModifier?.rushCdAdd ? state.activeModifier.rushCdAdd * 1000 : 0;
   state.rush.activeUntil = now + duration;
-  state.rush.cooldownUntil = now + 32000 + cdPenalty;
+  const darkShiftPenalty = state.flags.darkShift ? 3000 : 0;
+  state.rush.cooldownUntil = now + 32000 + cdPenalty + darkShiftPenalty;
+  if (state.contract) state.contractContext.rushUsed = true;
   el.rushBtn?.classList.add("boost-fire");
   if (el.energyWave) {
     el.energyWave.classList.remove("fire");
@@ -354,6 +368,7 @@ function startContract(id) {
   if (!c) return;
   if (state.resources.reputation < c.minRep) return;
   state.contract = { ...c, remaining: c.duration, progress: 0 };
+  state.contractContext.rushUsed = false;
   toast(`Contract started: ${c.name}`);
   renderAll();
 }
@@ -368,8 +383,9 @@ function tickContract(dt, windowsMade) {
       completeContract();
     } else {
       toast("Contract failed. Client unhappy.");
-      state.resources.reputation = Math.max(0, state.resources.reputation - 2.5);
+      state.resources.reputation = Math.max(0, state.resources.reputation - (state.contract.failRep || 2.5));
       state.contract = null;
+      state.contractContext.rushUsed = false;
     }
     renderAll();
   }
@@ -377,7 +393,10 @@ function tickContract(dt, windowsMade) {
 
 function completeContract() {
   const c = state.contract;
-  const mult = 1 + Math.min(0.32, state.modifiers.contractReward);
+  const mastery = state.metaUpgrades.contractMastery * 0.04;
+  let mult = 1 + Math.min(0.32, state.modifiers.contractReward) + mastery;
+  if (state.flags.continuousCasting) mult *= 0.9;
+  if (state.flags.priorityPipeline) mult *= 1.06;
   state.resources.cash += (c.rewards.cash || 0) * mult;
   state.resources.parts += Math.round((c.rewards.parts || 0) * mult);
   state.resources.research += Math.round((c.rewards.research || 0) * mult);
@@ -385,7 +404,10 @@ function completeContract() {
 
   if (state.flags.priorityPipeline && Math.random() < 0.1) state.resources.parts += 2;
 
-  if (Math.random() < Math.min(0.17, 0.05 + state.completedContracts * 0.0015)) {
+  applyContractSpecial(c, mult);
+
+  const blueprintChance = Math.min(0.17, 0.05 + state.completedContracts * 0.0015 + state.metaUpgrades.blueprintIntel * 0.02);
+  if (Math.random() < blueprintChance) {
     awardBlueprint();
   }
 
@@ -393,6 +415,25 @@ function completeContract() {
   showRewardPopup(`Contract Complete +$${fmt((c.rewards.cash || 0) * mult)}`);
   toast(`Contract complete: ${c.name}`);
   state.contract = null;
+  state.contractContext.rushUsed = false;
+}
+
+function applyContractSpecial(contract, mult) {
+  if (!contract?.special) return;
+  if (contract.special === "research_bonus") {
+    state.resources.research += 1 + Math.floor(mult);
+  }
+  if (contract.special === "rush_bonus" && state.contractContext.rushUsed) {
+    state.resources.cash += contract.rewards.cash * 0.15;
+    state.resources.parts += 2;
+    toast("Rush synergy bonus awarded.");
+  }
+  if (contract.special === "risky_parts" && Math.random() < 0.45) {
+    state.resources.parts += 4;
+  }
+  if (contract.special === "blueprint_chance" && Math.random() < 0.18) {
+    awardBlueprint();
+  }
 }
 
 function awardBlueprint() {
@@ -453,12 +494,64 @@ function tryModernize() {
     state.resources.tokens += reward;
     state.modernizationCount += 1;
     const preservedTokens = state.resources.tokens;
+    const preservedMeta = { ...state.metaUpgrades };
     state = defaultState();
     state.resources.tokens = preservedTokens;
+    state.metaUpgrades = preservedMeta;
+    state.resources.cash += state.metaUpgrades.kickstart * 40;
     toast(`Modernized! +${reward} tokens.`);
     closeModal();
     renderAll();
   });
+}
+
+function modernizationUpgradeCost(key) {
+  const lvl = state.metaUpgrades[key] || 0;
+  return 1 + lvl;
+}
+
+function buyModernizationUpgrade(key) {
+  const cost = modernizationUpgradeCost(key);
+  if (state.resources.tokens < cost) return;
+  state.resources.tokens -= cost;
+  state.metaUpgrades[key] = (state.metaUpgrades[key] || 0) + 1;
+  toast("Modernization protocol upgraded.");
+  openModernizationHub();
+}
+
+function openModernizationHub() {
+  const upgrades = [
+    { key: "kickstart", name: "Kickstart Capital", desc: "+$40 starting cash per level" },
+    { key: "contractMastery", name: "Contract Mastery", desc: "+4% contract rewards per level" },
+    { key: "offlineLab", name: "Offline Logistics", desc: "+12% offline gains per level" },
+    { key: "blueprintIntel", name: "Blueprint Intel", desc: "+2% blueprint chance per level" }
+  ];
+  const upgradeHtml = upgrades.map((u) => {
+    const lvl = state.metaUpgrades[u.key] || 0;
+    const cost = modernizationUpgradeCost(u.key);
+    const disabled = state.resources.tokens < cost ? "disabled" : "";
+    return `<div class="row"><div class="row-head"><strong>${u.name}</strong><span>Lv ${lvl}</span></div><div class="row-meta"><span>${u.desc}</span><span>Cost ${cost} 🏅</span></div><button class="action-btn" data-meta="${u.key}" ${disabled}>Invest</button></div>`;
+  }).join("");
+
+  const ready = state.resources.cash >= modernizationCost() && calcModernizationReward() >= 1;
+  openModal(`
+    <h3>Modernization Hub</h3>
+    <p>Tokens: <strong>${fmt(state.resources.tokens)}</strong></p>
+    <div class="list">${upgradeHtml}</div>
+    <hr/>
+    <p>Reset current run for <strong>${calcModernizationReward()}</strong> tokens (requires $${fmt(modernizationCost())}).</p>
+    <button id="modernizeRun" class="action-btn" ${ready ? "" : "disabled"}>Modernize Run</button>
+    <button id="closeModernizeHub" class="action-btn">Close</button>
+  `);
+
+  document.querySelectorAll("[data-meta]").forEach((btn) => {
+    btn.addEventListener("click", () => buyModernizationUpgrade(btn.dataset.meta));
+  });
+  document.getElementById("modernizeRun")?.addEventListener("click", () => {
+    closeModal();
+    tryModernize();
+  });
+  document.getElementById("closeModernizeHub")?.addEventListener("click", closeModal);
 }
 
 function hardReset() {
@@ -550,7 +643,8 @@ function renderHUD() {
     })[0];
   const eta = secondsToAfford(goalTarget.cost);
   const etaLabel = timeToAffordLabel(eta);
-  const goalText = `Goal: ${goalTarget.line.name} $${fmt(goalTarget.cost)} (${etaLabel})`;
+  const milestone = getMilestoneGoal();
+  const goalText = `Goal: ${goalTarget.line.name} $${fmt(goalTarget.cost)} (${etaLabel}) • ${milestone}`;
   if (el.goalLabel && goalText !== hudCache.goal) {
     el.goalLabel.textContent = goalText;
     hudCache.goal = goalText;
@@ -573,6 +667,13 @@ function renderHUD() {
   }
 
   updateMachineActivity();
+}
+
+function getMilestoneGoal() {
+  if (state.windowsMade < 1000) return "Mid: 1K windows";
+  if (state.completedContracts < 10) return `Mid: ${10 - state.completedContracts} contracts to milestone`;
+  if (state.modernizationCount < 3) return `Long: ${3 - state.modernizationCount} modernizations`;
+  return "Long: collect all blueprints";
 }
 
 function renderFactory() {
@@ -614,7 +715,8 @@ function renderContracts() {
     const lock = state.resources.reputation < c.minRep;
     const need = Math.ceil(c.windows * (1 + tierBoost * 0.26));
     const rewardCash = Math.ceil(c.rewards.cash * (1 + tierBoost * 0.06));
-    return `<div class="row"><div class="row-head"><strong>${c.name}</strong><span>${c.type}</span></div><div class="row-meta"><span>Need ${need} windows in ${c.duration}s</span><span>Rep ${c.minRep.toFixed(0)}</span></div><div class="row-meta"><span>Reward: $${fmt(rewardCash)} + extras</span><span>${lock ? "Locked" : "Ready"}</span></div>${!lock && !state.contract ? `<button class="action-btn" data-contract="${c.id}">Start</button>` : ""}</div>`;
+    const special = c.special ? `Special: ${c.special.replace("_", " ")}` : "Special: none";
+    return `<div class="row"><div class="row-head"><strong>${c.name}</strong><span>${c.type}</span></div><div class="row-meta"><span>Need ${need} windows in ${c.duration}s</span><span>Rep ${c.minRep.toFixed(0)}</span></div><div class="row-meta"><span>Reward: $${fmt(rewardCash)} + extras</span><span>${lock ? "Locked" : "Ready"}</span></div><div class="row-meta"><span>${special}</span><span>Fail -${c.failRep || 2} rep</span></div>${!lock && !state.contract ? `<button class="action-btn" data-contract="${c.id}">Start</button>` : ""}</div>`;
   }).join("");
 
   el.contractList.querySelectorAll("button[data-contract]").forEach((btn) => btn.addEventListener("click", () => startContract(btn.dataset.contract)));
@@ -797,7 +899,8 @@ function applyOfflineEarnings() {
 
   const cappedSec = Math.min(1200, offlineSec);
   const offlineRate = calcWindowsPerSec() * cashPerWindow();
-  const offlineGain = offlineRate * cappedSec * 0.2;
+  const offlineBoost = 1 + state.metaUpgrades.offlineLab * 0.12 + (state.flags.darkShift ? 0.2 : 0);
+  const offlineGain = offlineRate * cappedSec * 0.2 * offlineBoost;
   if (offlineGain > 0) {
     state.resources.cash += offlineGain;
     state.totalEarned += offlineGain;
