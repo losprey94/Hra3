@@ -114,6 +114,18 @@ const defaultState = () => ({
     contractMastery: 0,
     offlineLab: 0,
     blueprintIntel: 0
+  },
+  settings: {
+    showFloatingNumbers: true,
+    autoBoost: false,
+    compactUi: false,
+    animations: true,
+    reducedMotion: false,
+    glowIntensity: "medium",
+    soundEnabled: false,
+    soundVolume: 60,
+    lowPerf: false,
+    fpsFriendly: false
   }
 });
 
@@ -121,6 +133,8 @@ let state = loadState();
 let tickerFrame = 0;
 let goalReadyLastTick = false;
 let hudCache = { resources: "", rps: "", wps: "", goal: "", cash: "" };
+let activeModal = "";
+let fpsFrameSkip = 0;
 
 const el = {
   resourceStrip: document.getElementById("resourceStrip"),
@@ -151,6 +165,7 @@ validateConfig();
 bootstrapFactoryVisual();
 bindEvents();
 applyOfflineEarnings();
+applySettingsToUI();
 renderAll();
 setInterval(gameTick, 250);
 setInterval(autoSave, 10000);
@@ -193,16 +208,28 @@ function bindEvents() {
 
   document.getElementById("researchBtn")?.addEventListener("click", convertResearch);
   document.getElementById("prestigeBtn")?.addEventListener("click", openModernizationHub);
+  document.getElementById("settingsBtn")?.addEventListener("click", openSettingsPanel);
   document.getElementById("statsBtn")?.addEventListener("click", showStats);
   document.getElementById("saveBtn")?.addEventListener("click", () => {
     autoSave();
     toast("Game saved.");
   });
   document.getElementById("resetBtn")?.addEventListener("click", hardReset);
+
+  el.modalLayer?.addEventListener("click", (e) => {
+    if (e.target === el.modalLayer) closeModal();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !el.modalLayer.classList.contains("hidden")) closeModal();
+  });
 }
 
 function gameTick() {
   const now = Date.now();
+  if (state.settings.fpsFriendly) {
+    fpsFrameSkip = (fpsFrameSkip + 1) % 2;
+    if (fpsFrameSkip === 1) return;
+  }
   const dt = Math.min((now - state.lastTick) / 1000, 2.5);
   state.lastTick = now;
   state.playtime += dt;
@@ -244,12 +271,17 @@ function gameTick() {
     el.rushStatus.textContent = "Tap to overclock lines and push your next upgrade.";
   }
 
+  if (state.settings.autoBoost && now >= state.rush.cooldownUntil && now > state.rush.activeUntil) {
+    activateRush();
+  }
+
   el.factoryView?.classList.toggle("boosted", now <= state.rush.activeUntil);
 
   tickerFrame += dt;
-  const flowInterval = now <= state.rush.activeUntil ? 0.55 : 1;
+  const perfPenalty = state.settings.lowPerf ? 1.35 : 1;
+  const flowInterval = (now <= state.rush.activeUntil ? 0.55 : 1) * perfPenalty;
   if (tickerFrame > flowInterval) {
-    animateFlow();
+    if (state.settings.animations) animateFlow();
     if (el.incomeTicker) el.incomeTicker.textContent = `+$${fmt(cashGain / dt)}/s`;
     if (cashGain > 0.01) spawnMoneyPop(cashGain / dt, now <= state.rush.activeUntil);
     tickerFrame = 0;
@@ -795,6 +827,7 @@ function bootstrapFactoryVisual() {
 }
 
 function animateFlow() {
+  if (!state.settings.animations) return;
   const activeLines = lineDefs.filter((l) => state.lines[l.id].level > 0).length;
   if (!activeLines) return;
   const links = [
@@ -817,12 +850,12 @@ function animateFlow() {
         { transform: `translate(${path.to.x - path.from.x}px, ${path.to.y - path.from.y}px) scale(1)`, opacity: 1, offset: 0.85 },
         { transform: `translate(${path.to.x - path.from.x}px, ${path.to.y - path.from.y}px) scale(0.96)`, opacity: 0 }
       ],
-      { duration: 980, easing: "linear" }
+      { duration: state.settings.reducedMotion ? 620 : 980, easing: "linear" }
     );
     setTimeout(() => {
       item.remove();
-      spawnCompletionBurst(path.to.x, path.to.y);
-      spawnTickPop(path.to.x + 8, path.to.y - 6);
+      if (!state.settings.lowPerf) spawnCompletionBurst(path.to.x, path.to.y);
+      if (!state.settings.lowPerf) spawnTickPop(path.to.x + 8, path.to.y - 6);
     }, 1000);
   });
 }
@@ -851,6 +884,8 @@ function updateMachineActivity() {
 
 function spawnMoneyPop(amountPerSec, boosted = false) {
   if (!el.fxLayer) return;
+  if (!state.settings.showFloatingNumbers) return;
+  if (!state.settings.animations) return;
   const pop = document.createElement("div");
   pop.className = `money-pop ${boosted ? "boost" : ""}`;
   pop.textContent = `+$${fmt(amountPerSec)}/s`;
@@ -860,6 +895,7 @@ function spawnMoneyPop(amountPerSec, boosted = false) {
 
 function spawnCompletionBurst(x, y) {
   if (!el.fxLayer) return;
+  if (!state.settings.animations) return;
   const burst = document.createElement("div");
   burst.className = "completion-burst";
   burst.style.left = `${x}px`;
@@ -870,6 +906,7 @@ function spawnCompletionBurst(x, y) {
 
 function spawnTickPop(x, y) {
   if (!el.fxLayer) return;
+  if (!state.settings.animations) return;
   const tick = document.createElement("div");
   tick.className = "tick-pop";
   tick.textContent = "✓";
@@ -881,6 +918,7 @@ function spawnTickPop(x, y) {
 
 function showRewardPopup(text) {
   if (!el.fxLayer) return;
+  if (!state.settings.animations) return;
   const pop = document.createElement("div");
   pop.className = "reward-pop";
   pop.textContent = text;
@@ -909,6 +947,114 @@ function applyOfflineEarnings() {
   state.savedAt = now;
 }
 
+function openSettingsPanel() {
+  activeModal = "settings";
+  el.sideMenu?.classList.remove("open");
+  const s = state.settings;
+  openModal(`
+    <div class="settings-head"><h3>Settings</h3><button id="settingsClose" class="menu-btn">✕</button></div>
+    <div class="list settings-list">
+      <div class="row"><strong>Gameplay</strong>
+        ${settingToggle("showFloatingNumbers", "Floating numbers", s.showFloatingNumbers)}
+        ${settingToggle("autoBoost", "Auto-trigger boost", s.autoBoost)}
+        ${settingToggle("compactUi", "Compact UI mode", s.compactUi)}
+      </div>
+      <div class="row"><strong>Visual</strong>
+        ${settingToggle("animations", "Animations", s.animations)}
+        ${settingToggle("reducedMotion", "Reduced motion", s.reducedMotion)}
+        <label class="setting-row">Glow intensity <select data-setting-select=\"glowIntensity\"><option ${s.glowIntensity === "low" ? "selected" : ""}>low</option><option ${s.glowIntensity === "medium" ? "selected" : ""}>medium</option><option ${s.glowIntensity === "high" ? "selected" : ""}>high</option></select></label>
+      </div>
+      <div class="row"><strong>Audio</strong>
+        ${settingToggle("soundEnabled", "Master sound", s.soundEnabled)}
+        <label class="setting-row">Volume <input data-setting-range=\"soundVolume\" type=\"range\" min=\"0\" max=\"100\" value=\"${s.soundVolume}\"/></label>
+      </div>
+      <div class="row"><strong>Performance</strong>
+        ${settingToggle("lowPerf", "Low performance mode", s.lowPerf)}
+        ${settingToggle("fpsFriendly", "FPS-friendly mode", s.fpsFriendly)}
+      </div>
+      <div class="row"><strong>Data</strong>
+        <button class="action-btn" data-data-action="export">Export Save</button>
+        <button class="action-btn" data-data-action="import">Import Save</button>
+        <button class="action-btn" data-data-action="reset">Reset Progress</button>
+      </div>
+    </div>
+  `);
+
+  document.getElementById("settingsClose")?.addEventListener("click", closeModal);
+  document.querySelectorAll("[data-setting]").forEach((elNode) => {
+    elNode.addEventListener("change", () => {
+      updateSetting(elNode.dataset.setting, elNode.checked);
+    });
+  });
+  document.querySelectorAll("[data-setting-select]").forEach((elNode) => {
+    elNode.addEventListener("change", () => updateSetting(elNode.dataset.settingSelect, elNode.value));
+  });
+  document.querySelectorAll("[data-setting-range]").forEach((elNode) => {
+    elNode.addEventListener("input", () => updateSetting(elNode.dataset.settingRange, Number(elNode.value)));
+  });
+  document.querySelectorAll("[data-data-action]").forEach((btn) => {
+    btn.addEventListener("click", () => handleDataAction(btn.dataset.dataAction));
+  });
+}
+
+function settingToggle(key, label, checked) {
+  return `<label class="setting-row"><span>${label}</span><input data-setting="${key}" type="checkbox" ${checked ? "checked" : ""}/></label>`;
+}
+
+function updateSetting(key, value) {
+  if (!(key in state.settings)) return;
+  state.settings[key] = value;
+  applySettingsToUI();
+  autoSave();
+}
+
+function applySettingsToUI() {
+  document.body.classList.toggle("compact-ui", !!state.settings.compactUi);
+  document.body.classList.toggle("animations-off", !state.settings.animations);
+  document.body.classList.toggle("reduced-motion", !!state.settings.reducedMotion);
+  const glow = { low: "0.7", medium: "1", high: "1.25" }[state.settings.glowIntensity] || "1";
+  document.documentElement.style.setProperty("--glow-mul", glow);
+}
+
+function handleDataAction(action) {
+  if (action === "export") {
+    const payload = btoa(unescape(encodeURIComponent(JSON.stringify(state))));
+    navigator.clipboard?.writeText(payload).then(() => toast("Save copied to clipboard.")).catch(() => {
+      openModal(`<h3>Copy Save</h3><textarea style="width:100%;height:120px;">${payload}</textarea><button class="action-btn" id="closeExport">Close</button>`);
+      document.getElementById("closeExport")?.addEventListener("click", openSettingsPanel);
+    });
+  }
+  if (action === "import") {
+    openModal(`<h3>Import Save</h3><textarea id="importBox" style="width:100%;height:120px;" placeholder="Paste save data"></textarea><button id="confirmImport" class="action-btn">Import</button><button id="cancelImport" class="action-btn">Cancel</button>`);
+    document.getElementById("cancelImport")?.addEventListener("click", openSettingsPanel);
+    document.getElementById("confirmImport")?.addEventListener("click", () => {
+      try {
+        const raw = document.getElementById("importBox").value.trim();
+        const parsed = JSON.parse(decodeURIComponent(escape(atob(raw))));
+        state = { ...defaultState(), ...parsed, lastTick: Date.now() };
+        applySettingsToUI();
+        closeModal();
+        renderAll();
+        toast("Save imported.");
+      } catch {
+        toast("Invalid save data.");
+      }
+    });
+  }
+  if (action === "reset") {
+    openModal(`<h3>Confirm Reset</h3><p>This will erase all progress.</p><button id="confirmDataReset" class="action-btn">Reset Everything</button><button id="cancelDataReset" class="action-btn">Cancel</button>`);
+    document.getElementById("cancelDataReset")?.addEventListener("click", openSettingsPanel);
+    document.getElementById("confirmDataReset")?.addEventListener("click", () => {
+      localStorage.removeItem(SAVE_KEY);
+      state = defaultState();
+      applySettingsToUI();
+      closeModal();
+      renderAll();
+      toast("Progress reset.");
+    });
+  }
+}
+
 function toast(msg) {
   const t = document.createElement("div");
   t.className = "toast";
@@ -923,6 +1069,7 @@ function openModal(html) {
 }
 
 function closeModal() {
+  activeModal = "";
   el.modalLayer.classList.add("hidden");
   el.modalLayer.innerHTML = "";
 }
