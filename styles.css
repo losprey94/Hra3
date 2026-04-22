@@ -52,7 +52,7 @@ body {
   padding: 8px 10px;
   position: sticky;
   top: 0;
-  z-index: 20;
+  z-index: 36;
   background: linear-gradient(180deg, rgba(8, 14, 24, 0.96), rgba(8, 14, 24, 0.74));
   backdrop-filter: blur(6px);
   border-bottom: 1px solid rgba(83, 143, 223, 0.22);
@@ -76,6 +76,8 @@ h1 {
   border-radius: 10px;
   width: 38px;
   height: 38px;
+  position: relative;
+  z-index: 37;
 }
 
 .resource-strip {
@@ -800,6 +802,9 @@ body.modernize-flash::after {
   background: #253858;
   text-align: left;
   min-width: 140px;
+  display: grid;
+  gap: 2px;
+  color: #e9f2ff;
 }
 
 .node.affordable {
@@ -839,12 +844,46 @@ body.modernize-flash::after {
 }
 
 .node.owned {
-  background: #355f4b;
+  background: #2f5f48;
   border-color: #70c69d;
+  color: #f2fffa;
 }
 
 .node:disabled {
-  opacity: 0.6;
+  opacity: 1;
+  color: #d6e4fa;
+  background: #223553;
+  border-color: #4f7099;
+}
+
+.node-title {
+  font-weight: 700;
+  color: #f0f6ff;
+  line-height: 1.2;
+}
+
+.node-cost {
+  color: #a9dcff;
+  font-weight: 700;
+  font-size: 0.68rem;
+}
+
+.node-desc {
+  color: #d2def1;
+  font-size: 0.63rem;
+  line-height: 1.25;
+}
+
+.node.owned .node-cost {
+  color: #bff6da;
+}
+
+.node.keystone .node-title {
+  color: #ffe4a4;
+}
+
+.node.keystone .node-desc {
+  color: #f6ddab;
 }
 
 .bottom-nav {
@@ -891,7 +930,7 @@ body.modernize-flash::after {
   width: 270px;
   background: linear-gradient(180deg, #16243a, #121f33);
   border-left: 1px solid #4b6d99;
-  z-index: 30;
+  z-index: 42;
   padding: 14px;
   transition: right 0.25s ease;
 }
@@ -915,7 +954,7 @@ body.modernize-flash::after {
   position: fixed;
   inset: 0;
   background: rgba(4, 8, 15, 0.58);
-  z-index: 29;
+  z-index: 34;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s ease;
@@ -928,7 +967,7 @@ body.modernize-flash::after {
 
 body.drawer-open {
   overflow: hidden;
-  touch-action: none;
+  touch-action: pan-y;
 }
 
 .side-menu button {

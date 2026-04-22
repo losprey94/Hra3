@@ -239,6 +239,7 @@ function bindEvents() {
   document.getElementById("menuButton")?.addEventListener("click", toggleDrawer);
   el.closeMenuBtn?.addEventListener("click", () => setDrawerOpen(false));
   el.drawerOverlay?.addEventListener("click", () => setDrawerOpen(false));
+  el.drawerOverlay?.addEventListener("touchstart", () => setDrawerOpen(false), { passive: true });
 
   document.getElementById("researchBtn")?.addEventListener("click", convertResearch);
   document.getElementById("prestigeBtn")?.addEventListener("click", openModernizationHub);
@@ -269,6 +270,7 @@ function setDrawerOpen(open) {
     el.sideMenu.classList.toggle("open", drawerOpen);
     el.sideMenu.setAttribute("aria-hidden", drawerOpen ? "false" : "true");
   }
+  document.getElementById("menuButton")?.setAttribute("aria-expanded", drawerOpen ? "true" : "false");
   el.drawerOverlay?.classList.toggle("open", drawerOpen);
   document.body.classList.toggle("drawer-open", drawerOpen);
 }
@@ -1109,7 +1111,7 @@ function renderSkills() {
       const ownedNode = state.skills.includes(s.id);
       const canBuy = canUnlockSkill(s);
       const prereqLabel = s.prereq && !ownedNode ? `Req: ${skillDefs.find((x) => x.id === s.prereq)?.name || "Node"}` : s.desc;
-      return `<button class="node ${s.type || ""} ${ownedNode ? "owned" : ""} ${(!ownedNode && canBuy) ? "affordable" : ""}" data-skill="${s.id}" ${ownedNode || !canBuy ? "disabled" : ""}>${s.type === "keystone" ? `<span class="node-tag">Keystone</span>` : ""}<strong>${s.name}</strong><br/>${ownedNode ? "Selected" : `${s.cost} SP`}<br/><small>${prereqLabel}</small></button>`;
+      return `<button class="node ${s.type || ""} ${ownedNode ? "owned" : ""} ${(!ownedNode && canBuy) ? "affordable" : ""}" data-skill="${s.id}" ${ownedNode || !canBuy ? "disabled" : ""}>${s.type === "keystone" ? `<span class="node-tag">Keystone</span>` : ""}<span class="node-title">${s.name}</span><span class="node-cost">${ownedNode ? "Selected" : `${s.cost} SP`}</span><span class="node-desc">${prereqLabel}</span></button>`;
     }).join("")}</div></div>`;
   }).join("");
   el.skillBranches.innerHTML = `${header}${body}`;
