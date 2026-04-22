@@ -104,6 +104,7 @@ h1 {
 
 .screen-container {
   padding: 0 12px 10px;
+  overflow: visible;
 }
 
 .hero-panel {
@@ -738,9 +739,9 @@ body.modernize-flash::after {
 .skill-branches {
   display: grid;
   gap: 10px;
-  max-height: 62vh;
-  overflow: auto;
-  padding-right: 2px;
+  max-height: none;
+  overflow: visible;
+  padding-right: 0;
 }
 
 .branch {
