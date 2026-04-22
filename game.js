@@ -27,34 +27,40 @@ const contracts = [
 
 const skillDefs = [
   { id: "prod_1", name: "Line Tuning", branch: "Production", tier: 1, cost: 1, type: "small", desc: "+4% production speed", effect: () => state.modifiers.prod += 0.04 },
-  { id: "prod_2", name: "Cut Precision", branch: "Production", tier: 2, cost: 1, type: "small", prereq: "prod_1", desc: "+4% production speed", effect: () => state.modifiers.prod += 0.04 },
-  { id: "prod_3", name: "Furnace Pressure", branch: "Production", tier: 3, cost: 2, type: "medium", prereq: "prod_2", desc: "+10% production speed", effect: () => state.modifiers.prod += 0.1 },
-  { id: "prod_4", name: "Output Mix", branch: "Production", tier: 4, cost: 2, type: "notable", prereq: "prod_2", desc: "+8% cash per window", effect: () => state.modifiers.cashBonus += 0.08 },
-  { id: "prod_5", name: "Keystone: Overdrive Protocol", branch: "Production", tier: 5, cost: 4, type: "keystone", prereq: "prod_3", desc: "+25% production, -10% contract rewards", effect: () => { state.modifiers.prod += 0.25; state.modifiers.contractReward -= 0.1; } },
+  { id: "prod_2", name: "Cut Precision", branch: "Production", tier: 2, cost: 2, type: "small", prereq: "prod_1", desc: "+4% production speed", effect: () => state.modifiers.prod += 0.04 },
+  { id: "prod_3", name: "Furnace Pressure", branch: "Production", tier: 3, cost: 3, type: "medium", prereq: "prod_2", desc: "+10% production speed", effect: () => state.modifiers.prod += 0.1 },
+  { id: "prod_4", name: "Output Mix", branch: "Production", tier: 4, cost: 4, type: "notable", prereq: "prod_2", desc: "+10% cash/window", effect: () => state.modifiers.cashBonus += 0.1 },
+  { id: "prod_5", name: "Keystone: Overdrive Protocol", branch: "Production", tier: 5, cost: 6, type: "keystone", prereq: "prod_3", desc: "▲ +35% production ▼ -25% contract rewards", effect: () => { state.modifiers.prod += 0.35; state.modifiers.contractReward -= 0.25; } },
 
-  { id: "auto_1", name: "Autoload Arms", branch: "Automation", tier: 1, cost: 1, type: "small", desc: "+4% offline efficiency", effect: () => state.modifiers.offlineEfficiency += 0.04 },
-  { id: "auto_2", name: "Sensor Mesh", branch: "Automation", tier: 2, cost: 1, type: "small", prereq: "auto_1", desc: "+4% part recovery chance", effect: () => state.modifiers.partsChance += 0.04 },
-  { id: "auto_3", name: "Queued Dispatch", branch: "Automation", tier: 3, cost: 2, type: "medium", prereq: "auto_2", desc: "+10% offline efficiency", effect: () => state.modifiers.offlineEfficiency += 0.1 },
-  { id: "auto_4", name: "Maintenance AI", branch: "Automation", tier: 4, cost: 2, type: "notable", prereq: "auto_2", desc: "-8% line costs", effect: () => state.modifiers.costDiscount += 0.08 },
-  { id: "auto_5", name: "Keystone: Night Shift Grid", branch: "Automation", tier: 5, cost: 4, type: "keystone", prereq: "auto_3", desc: "+25% offline, -8% active production", effect: () => { state.modifiers.offlineEfficiency += 0.25; state.modifiers.activeProductionPenalty += 0.08; } },
+  { id: "auto_1", name: "Autoload Arms", branch: "Automation", tier: 1, cost: 1, type: "small", desc: "+5% offline efficiency", effect: () => state.modifiers.offlineEfficiency += 0.05 },
+  { id: "auto_2", name: "Sensor Mesh", branch: "Automation", tier: 2, cost: 2, type: "small", prereq: "auto_1", desc: "+4% part recovery chance", effect: () => state.modifiers.partsChance += 0.04 },
+  { id: "auto_3", name: "Queued Dispatch", branch: "Automation", tier: 3, cost: 3, type: "medium", prereq: "auto_2", desc: "+12% offline efficiency", effect: () => state.modifiers.offlineEfficiency += 0.12 },
+  { id: "auto_4", name: "Maintenance AI", branch: "Automation", tier: 4, cost: 4, type: "notable", prereq: "auto_2", desc: "-10% line costs", effect: () => state.modifiers.costDiscount += 0.1 },
+  { id: "auto_5", name: "Keystone: Night Shift Grid", branch: "Automation", tier: 5, cost: 6, type: "keystone", prereq: "auto_3", desc: "▲ +45% offline ▼ -15% active production", effect: () => { state.modifiers.offlineEfficiency += 0.45; state.modifiers.activeProductionPenalty += 0.15; } },
 
-  { id: "con_1", name: "Client Briefing", branch: "Contracts", tier: 1, cost: 1, type: "small", desc: "+4% contract rewards", effect: () => state.modifiers.contractReward += 0.04 },
-  { id: "con_2", name: "Sales Cadence", branch: "Contracts", tier: 2, cost: 1, type: "small", prereq: "con_1", desc: "+4% contract rewards", effect: () => state.modifiers.contractReward += 0.04 },
-  { id: "con_3", name: "Premium Clauses", branch: "Contracts", tier: 3, cost: 2, type: "medium", prereq: "con_2", desc: "+10% premium contract rewards", effect: () => state.modifiers.premiumContractReward += 0.1 },
-  { id: "con_4", name: "Rapid Negotiation", branch: "Contracts", tier: 4, cost: 2, type: "notable", prereq: "con_2", desc: "-8% contract duration", effect: () => state.modifiers.contractDurationMul -= 0.08 },
-  { id: "con_5", name: "Keystone: All-In Brokerage", branch: "Contracts", tier: 5, cost: 4, type: "keystone", prereq: "con_3", desc: "+50% contract rewards, +25% contract duration", effect: () => { state.modifiers.contractReward += 0.5; state.modifiers.contractDurationMul += 0.25; } },
+  { id: "con_1", name: "Client Briefing", branch: "Contracts", tier: 1, cost: 1, type: "small", desc: "+5% contract rewards", effect: () => state.modifiers.contractReward += 0.05 },
+  { id: "con_2", name: "Sales Cadence", branch: "Contracts", tier: 2, cost: 2, type: "small", prereq: "con_1", desc: "+5% contract rewards", effect: () => state.modifiers.contractReward += 0.05 },
+  { id: "con_3", name: "Premium Clauses", branch: "Contracts", tier: 3, cost: 3, type: "medium", prereq: "con_2", desc: "+12% premium contract rewards", effect: () => state.modifiers.premiumContractReward += 0.12 },
+  { id: "con_4", name: "Rapid Negotiation", branch: "Contracts", tier: 4, cost: 4, type: "notable", prereq: "con_2", desc: "-10% contract duration", effect: () => state.modifiers.contractDurationMul -= 0.1 },
+  { id: "con_5", name: "Keystone: All-In Brokerage", branch: "Contracts", tier: 5, cost: 6, type: "keystone", prereq: "con_3", desc: "▲ +70% contract rewards ▼ +35% duration & -12% production", effect: () => { state.modifiers.contractReward += 0.7; state.modifiers.contractDurationMul += 0.35; state.modifiers.prod -= 0.12; } },
 
-  { id: "eff_1", name: "Lean Routing", branch: "Efficiency", tier: 1, cost: 1, type: "small", desc: "-4% line costs", effect: () => state.modifiers.costDiscount += 0.04 },
-  { id: "eff_2", name: "Scrap Recovery", branch: "Efficiency", tier: 2, cost: 1, type: "small", prereq: "eff_1", desc: "+4% part recovery chance", effect: () => state.modifiers.partsChance += 0.04 },
-  { id: "eff_3", name: "Quality Rhythm", branch: "Efficiency", tier: 3, cost: 2, type: "medium", prereq: "eff_2", desc: "+10% reputation gain", effect: () => state.modifiers.reputationGain += 0.1 },
-  { id: "eff_4", name: "Balanced Throughput", branch: "Efficiency", tier: 4, cost: 2, type: "notable", prereq: "eff_2", desc: "+8% production and +8% contract rewards", effect: () => { state.modifiers.prod += 0.08; state.modifiers.contractReward += 0.08; } },
-  { id: "eff_5", name: "Keystone: Tight Margin", branch: "Efficiency", tier: 5, cost: 4, type: "keystone", prereq: "eff_3", desc: "-15% costs, -8% cash/window", effect: () => { state.modifiers.costDiscount += 0.15; state.modifiers.cashBonus -= 0.08; } },
+  { id: "eco_1", name: "Tax Timing", branch: "Economy", tier: 1, cost: 1, type: "small", desc: "+4% cash/window", effect: () => state.modifiers.cashBonus += 0.04 },
+  { id: "eco_2", name: "Bulk Negotiation", branch: "Economy", tier: 2, cost: 2, type: "small", prereq: "eco_1", desc: "-4% line costs", effect: () => state.modifiers.costDiscount += 0.04 },
+  { id: "eco_3", name: "Capital Rotation", branch: "Economy", tier: 3, cost: 3, type: "medium", prereq: "eco_2", desc: "+10% cash/window", effect: () => state.modifiers.cashBonus += 0.1 },
+  { id: "eco_4", name: "Margin Controls", branch: "Economy", tier: 4, cost: 4, type: "notable", prereq: "eco_2", desc: "-10% line costs", effect: () => state.modifiers.costDiscount += 0.1 },
+  { id: "eco_5", name: "Keystone: Profit Doctrine", branch: "Economy", tier: 5, cost: 6, type: "keystone", prereq: "eco_3", desc: "▲ +22% cash & -12% costs ▼ -25% fragment gains", effect: () => { state.modifiers.cashBonus += 0.22; state.modifiers.costDiscount += 0.12; state.modifiers.fragmentGain -= 0.25; } },
 
-  { id: "bp_1", name: "Fragment Handling", branch: "Blueprints", tier: 1, cost: 1, type: "small", desc: "+5% fragment gains", effect: () => state.modifiers.fragmentGain += 0.05 },
-  { id: "bp_2", name: "Archive Indexing", branch: "Blueprints", tier: 2, cost: 1, type: "small", prereq: "bp_1", desc: "+5% fragment gains", effect: () => state.modifiers.fragmentGain += 0.05 },
-  { id: "bp_3", name: "Lab Liaison", branch: "Blueprints", tier: 3, cost: 2, type: "medium", prereq: "bp_2", desc: "+10% contract research rewards", effect: () => state.modifiers.researchGain += 0.1 },
-  { id: "bp_4", name: "Fragment Survey", branch: "Blueprints", tier: 4, cost: 2, type: "notable", prereq: "bp_2", desc: "+8% chance for bonus fragment", effect: () => state.modifiers.rareFragmentChance += 0.08 },
-  { id: "bp_5", name: "Keystone: Prototype Obsession", branch: "Blueprints", tier: 5, cost: 4, type: "keystone", prereq: "bp_3", desc: "+60% fragment gains, -12% cash/window", effect: () => { state.modifiers.fragmentGain += 0.6; state.modifiers.cashBonus -= 0.12; } }
+  { id: "qual_1", name: "Optic Calibration", branch: "Quality", tier: 1, cost: 1, type: "small", desc: "+5% reputation gain", effect: () => state.modifiers.reputationGain += 0.05 },
+  { id: "qual_2", name: "Defect Catchers", branch: "Quality", tier: 2, cost: 2, type: "small", prereq: "qual_1", desc: "+4% part recovery chance", effect: () => state.modifiers.partsChance += 0.04 },
+  { id: "qual_3", name: "Seal Inspection", branch: "Quality", tier: 3, cost: 3, type: "medium", prereq: "qual_2", desc: "-12% contract fail reputation loss", effect: () => state.modifiers.contractFailurePenaltyMul -= 0.12 },
+  { id: "qual_4", name: "Premium Standard", branch: "Quality", tier: 4, cost: 4, type: "notable", prereq: "qual_2", desc: "+10% contract rewards", effect: () => state.modifiers.contractReward += 0.1 },
+  { id: "qual_5", name: "Keystone: Zero Defect Pledge", branch: "Quality", tier: 5, cost: 6, type: "keystone", prereq: "qual_3", desc: "▲ +20% rep & +12% parts ▼ -15% cash/window", effect: () => { state.modifiers.reputationGain += 0.2; state.modifiers.partsChance += 0.12; state.modifiers.cashBonus -= 0.15; } },
+
+  { id: "work_1", name: "Shift Meals", branch: "Workforce", tier: 1, cost: 1, type: "small", desc: "+4% rush power", effect: () => state.modifiers.rushPower += 0.04 },
+  { id: "work_2", name: "Safety Program", branch: "Workforce", tier: 2, cost: 2, type: "small", prereq: "work_1", desc: "-5% fail reputation loss", effect: () => state.modifiers.contractFailurePenaltyMul -= 0.05 },
+  { id: "work_3", name: "Crew Rhythm", branch: "Workforce", tier: 3, cost: 3, type: "medium", prereq: "work_2", desc: "+10% production speed", effect: () => state.modifiers.prod += 0.1 },
+  { id: "work_4", name: "Union Coordination", branch: "Workforce", tier: 4, cost: 4, type: "notable", prereq: "work_2", desc: "+12% rush duration", effect: () => state.modifiers.rushDuration += 1.2 },
+  { id: "work_5", name: "Keystone: Human Priority", branch: "Workforce", tier: 5, cost: 6, type: "keystone", prereq: "work_3", desc: "▲ -35% fail loss & +15% rush power ▼ -12% offline gains", effect: () => { state.modifiers.contractFailurePenaltyMul -= 0.35; state.modifiers.rushPower += 0.15; state.modifiers.offlineEfficiency -= 0.12; } }
 ];
 
 const blueprintDefs = [
@@ -79,10 +85,10 @@ const defaultState = () => ({
   contractContext: { rushUsed: false },
   completedContracts: 0,
   skills: [],
-  skillPoints: 2,
+  skillPoints: 1,
   skillXp: 0,
   skillLevel: 1,
-  nextSkillWindowMilestone: 2500,
+  nextSkillWindowMilestone: 4000,
   blueprints: [],
   blueprintFragments: 0,
   modifiers: {
@@ -101,7 +107,8 @@ const defaultState = () => ({
     contractDurationMul: 1,
     fragmentGain: 1,
     rareFragmentChance: 0,
-    researchGain: 0
+    researchGain: 0,
+    contractFailurePenaltyMul: 1
   },
   flags: {
     continuousCasting: false,
@@ -281,7 +288,7 @@ function gameTick() {
   state.windowsMade += made;
   while (state.windowsMade >= state.nextSkillWindowMilestone) {
     grantSkillXp(1, "production milestone");
-    state.nextSkillWindowMilestone += 2500;
+    state.nextSkillWindowMilestone += 4000;
   }
 
   const cashGain = made * cashPerWindow();
@@ -526,7 +533,8 @@ function markContractCompleted() {
 function failContract() {
   if (!state.contract || state.contract.status !== "active") return;
   toast("Contract failed. Client unhappy.");
-  state.resources.reputation = Math.max(0, state.resources.reputation - (state.contract.failRep || 2.5));
+  const failLoss = (state.contract.failRep || 2.5) * Math.max(0.2, state.modifiers.contractFailurePenaltyMul);
+  state.resources.reputation = Math.max(0, state.resources.reputation - failLoss);
   state.contract = null;
   state.contractContext.rushUsed = false;
   renderAll();
@@ -551,11 +559,12 @@ function claimContractReward() {
 
   const intelligenceBonus = state.metaUpgrades.fragmentMagnet * 0.05;
   const refinementBonus = state.metaUpgrades.fragmentRefining * 0.03;
-  let fragGain = Math.max(0, Math.round((c.fragmentReward || 0) * (1 + intelligenceBonus + refinementBonus) * state.modifiers.fragmentGain));
+  const fragmentMul = Math.max(0.2, state.modifiers.fragmentGain);
+  let fragGain = Math.max(0, Math.round((c.fragmentReward || 0) * (1 + intelligenceBonus + refinementBonus) * fragmentMul));
   if (Math.random() < state.metaUpgrades.rareContractSignal * 0.012 + state.modifiers.rareFragmentChance) fragGain += 1;
   state.blueprintFragments += fragGain;
   unlockBlueprintsFromFragments();
-  grantSkillXp(2 + (c.type === "Premium" ? 2 : 0), "contract completion");
+  grantSkillXp(1 + (c.type === "Premium" ? 1 : 0), "contract completion");
 
   state.completedContracts += 1;
   showRewardPopup(`Claimed +$${fmt((c.rewardPack.cash || 0) * mult)}`);
@@ -613,7 +622,7 @@ function recalculateProgressionEffects() {
 }
 
 function skillXpToNext(level) {
-  return 10 + level * 6;
+  return 16 + level * 9;
 }
 
 function grantSkillXp(amount, reason = "progress") {
@@ -1098,7 +1107,7 @@ function renderSkills() {
       const ownedNode = state.skills.includes(s.id);
       const canBuy = canUnlockSkill(s);
       const prereqLabel = s.prereq && !ownedNode ? `Req: ${skillDefs.find((x) => x.id === s.prereq)?.name || "Node"}` : s.desc;
-      return `<button class="node ${s.type || ""} ${ownedNode ? "owned" : ""} ${(!ownedNode && canBuy) ? "affordable" : ""}" data-skill="${s.id}" ${ownedNode || !canBuy ? "disabled" : ""}><strong>${s.name}</strong><br/>${ownedNode ? "Selected" : `${s.cost} SP`}<br/><small>${prereqLabel}</small></button>`;
+      return `<button class="node ${s.type || ""} ${ownedNode ? "owned" : ""} ${(!ownedNode && canBuy) ? "affordable" : ""}" data-skill="${s.id}" ${ownedNode || !canBuy ? "disabled" : ""}>${s.type === "keystone" ? `<span class="node-tag">Keystone</span>` : ""}<strong>${s.name}</strong><br/>${ownedNode ? "Selected" : `${s.cost} SP`}<br/><small>${prereqLabel}</small></button>`;
     }).join("")}</div></div>`;
   }).join("");
   el.skillBranches.innerHTML = `${header}${body}`;
@@ -1444,10 +1453,10 @@ function normalizeState(incoming) {
   if (next.metaUpgrades?.blueprintIntel) next.metaUpgrades.fragmentMagnet += next.metaUpgrades.blueprintIntel;
   next.blueprints = (next.blueprints || []).filter((id) => blueprintDefs.some((bp) => bp.id === id));
   next.skills = (next.skills || []).filter((id) => skillDefs.some((s) => s.id === id));
-  if (typeof next.skillPoints !== "number") next.skillPoints = 2;
+  if (typeof next.skillPoints !== "number") next.skillPoints = 1;
   if (typeof next.skillXp !== "number") next.skillXp = 0;
   if (typeof next.skillLevel !== "number") next.skillLevel = 1;
-  if (typeof next.nextSkillWindowMilestone !== "number") next.nextSkillWindowMilestone = 2500;
+  if (typeof next.nextSkillWindowMilestone !== "number") next.nextSkillWindowMilestone = 4000;
   if (typeof next.blueprintFragments !== "number") next.blueprintFragments = 0;
   if (!next.advancedTech) next.advancedTech = { points: 0, unlocked: false };
   if (next.contract && !next.contract.status) {

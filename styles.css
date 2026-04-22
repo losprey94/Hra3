@@ -788,6 +788,19 @@ body.modernize-flash::after {
 .node.keystone {
   border-color: var(--gold);
   background: linear-gradient(180deg, #3a3445, #2a2638);
+  box-shadow: 0 0 0 1px rgba(255, 204, 91, 0.3);
+}
+
+.node-tag {
+  display: inline-block;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 5px;
+  border-radius: 6px;
+  background: rgba(255, 205, 94, 0.16);
+  color: #ffd778;
+  margin-bottom: 4px;
 }
 
 .node.owned {
