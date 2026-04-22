@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Window Factory Tycoon</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app" class="app">
+    <header class="topbar">
+      <div class="title-wrap">
+        <h1>Window Factory Tycoon</h1>
+        <p class="goal">Factory Command</p>
+      </div>
+      <button id="menuButton" class="menu-btn">☰</button>
+    </header>
+
+    <section class="resource-strip" id="resourceStrip"></section>
+
+    <main class="screen-container">
+      <section id="screen-home" class="screen active">
+        <div class="hero-panel">
+          <div class="hero-revenue">
+            <p class="hero-label">Factory Revenue</p>
+            <h2 id="rpsLabel">$0</h2>
+            <p class="hero-sub">per second • <span id="wpsLabel">0</span> windows/sec</p>
+            <p class="hero-cash">Cash on hand: <strong id="cashFocus">$0</strong></p>
+          </div>
+          <div class="goal-chip" id="goalLabel">Goal: Upgrade the Cutter to Lv 2</div>
+        </div>
+
+        <div class="factory-view" id="factoryView">
+          <div class="factory-bg-layer"></div>
+          <div class="energy-wave" id="energyWave"></div>
+          <div class="factory-grid" id="factoryGrid"></div>
+          <div class="fx-layer" id="fxLayer"></div>
+          <div class="ticker" id="incomeTicker">+$0</div>
+          <div class="modifier-banner" id="modifierBanner"></div>
+          <div class="view-caption">Production Floor</div>
+        </div>
+
+        <div class="action-dock">
+          <button id="rushBtn" class="primary-btn">Boost Production</button>
+          <p id="rushStatus" class="subtext">Tap for a temporary production boost.</p>
+        </div>
+      </section>
+
+      <section id="screen-factory" class="screen">
+        <div class="card section-card">
+          <h2>Production Lines</h2>
+          <div id="lineList" class="list"></div>
+        </div>
+
+        <div class="card section-card">
+          <h2>Divisions</h2>
+          <div id="divisionList" class="list"></div>
+        </div>
+      </section>
+
+      <section id="screen-upgrades" class="screen">
+        <div class="card section-card">
+          <h2>Skill Tree</h2>
+          <div id="skillBranches" class="skill-branches"></div>
+        </div>
+        <div class="card section-card">
+          <h2>Blueprints</h2>
+          <div id="blueprintList" class="list"></div>
+        </div>
+      </section>
+
+      <section id="screen-contracts" class="screen">
+        <div class="card section-card">
+          <h2>Active Contract</h2>
+          <div id="activeContract" class="list"></div>
+        </div>
+        <div class="card section-card">
+          <h2>Available Contracts</h2>
+          <div id="contractList" class="list"></div>
+        </div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav">
+      <button data-tab="home" class="tab active">Home</button>
+      <button data-tab="factory" class="tab">Factory</button>
+      <button data-tab="upgrades" class="tab">Upgrades</button>
+      <button data-tab="contracts" class="tab">Contracts</button>
+    </nav>
+
+    <div id="drawerOverlay" class="drawer-overlay"></div>
+    <aside id="sideMenu" class="side-menu" aria-hidden="true">
+      <div class="drawer-head">
+        <h3>Factory HQ</h3>
+        <button id="closeMenuBtn" class="menu-btn" aria-label="Close menu">✕</button>
+      </div>
+      <button id="researchBtn">Convert Cash to Research</button>
+      <button id="prestigeBtn">Factory Modernization</button>
+      <button id="settingsBtn">Settings</button>
+      <button id="statsBtn">Stats Snapshot</button>
+      <button id="saveBtn">Manual Save</button>
+      <button id="resetBtn" class="danger">Hard Reset</button>
+      <p class="subtext">Secondary systems are here to keep the main UI focused.</p>
+    </aside>
+
+    <div id="toastLayer" class="toast-layer"></div>
+    <div id="modalLayer" class="modal-layer hidden"></div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
