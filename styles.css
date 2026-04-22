@@ -662,6 +662,32 @@ h1 {
   box-shadow: 0 0 0 1px rgba(112, 198, 157, 0.35);
 }
 
+.contract-card.state-active {
+  border-color: #5c87ba;
+}
+
+.contract-card.state-completed {
+  border-color: #7ee3b0;
+  box-shadow: 0 0 0 1px rgba(126, 227, 176, 0.35);
+  background: linear-gradient(180deg, rgba(43, 73, 83, 0.9), rgba(34, 59, 76, 0.9));
+}
+
+.claim-btn {
+  background: linear-gradient(180deg, #4cbf8b, #38a777);
+  border-color: #79e0b2;
+  color: #ebfff8;
+  box-shadow: 0 8px 14px rgba(47, 132, 96, 0.32);
+}
+
+.blueprint-card.locked {
+  opacity: 0.88;
+}
+
+.blueprint-card.unlocked {
+  border-color: #7ec8ff;
+  box-shadow: 0 0 0 1px rgba(126, 200, 255, 0.32);
+}
+
 .row-head {
   display: flex;
   justify-content: space-between;
