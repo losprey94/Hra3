@@ -703,6 +703,11 @@ h1 {
   background: #253858;
 }
 
+.node.affordable {
+  border-color: #7ee3b0;
+  box-shadow: 0 0 0 1px rgba(126, 227, 176, 0.3);
+}
+
 .node.keystone {
   border-color: var(--gold);
 }
@@ -710,6 +715,10 @@ h1 {
 .node.owned {
   background: #355f4b;
   border-color: #70c69d;
+}
+
+.node:disabled {
+  opacity: 0.6;
 }
 
 .bottom-nav {

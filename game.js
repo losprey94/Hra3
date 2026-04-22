@@ -136,6 +136,7 @@ let hudCache = { resources: "", rps: "", wps: "", goal: "", cash: "" };
 let activeModal = "";
 let fpsFrameSkip = 0;
 let drawerOpen = false;
+let uiRefreshTimer = 0;
 
 const el = {
   resourceStrip: document.getElementById("resourceStrip"),
@@ -309,6 +310,29 @@ function gameTick() {
 
   maybeSpawnModifier(now);
   renderHUD();
+  refreshDynamicViews(dt);
+}
+
+function refreshDynamicViews(dt) {
+  uiRefreshTimer += dt;
+  if (uiRefreshTimer < 0.4) return;
+  uiRefreshTimer = 0;
+
+  const activeScreen = document.querySelector(".screen.active")?.id || "";
+  if (activeScreen === "screen-factory") {
+    renderFactory();
+    renderDivisions();
+  }
+  if (activeScreen === "screen-contracts" || state.contract) {
+    renderContracts();
+  }
+  if (activeScreen === "screen-upgrades") {
+    renderSkills();
+    renderBlueprints();
+  }
+  if (activeModal === "modernizationHub") {
+    updateModernizationHubLive();
+  }
 }
 
 function calcWindowsPerSec() {
@@ -572,6 +596,7 @@ function buyModernizationUpgrade(key) {
 }
 
 function openModernizationHub() {
+  activeModal = "modernizationHub";
   setDrawerOpen(false);
   const upgrades = [
     { key: "kickstart", name: "Kickstart Capital", desc: "+$40 starting cash per level" },
@@ -589,10 +614,10 @@ function openModernizationHub() {
   const ready = state.resources.cash >= modernizationCost() && calcModernizationReward() >= 1;
   openModal(`
     <h3>Modernization Hub</h3>
-    <p>Tokens: <strong>${fmt(state.resources.tokens)}</strong></p>
+    <p>Tokens: <strong id="modTokens">${fmt(state.resources.tokens)}</strong></p>
     <div class="list">${upgradeHtml}</div>
     <hr/>
-    <p>Reset current run for <strong>${calcModernizationReward()}</strong> tokens (requires $${fmt(modernizationCost())}).</p>
+    <p>Reset current run for <strong id="modReward">${calcModernizationReward()}</strong> tokens (requires $<span id="modCost">${fmt(modernizationCost())}</span>).</p>
     <button id="modernizeRun" class="action-btn" ${ready ? "" : "disabled"}>Modernize Run</button>
     <button id="closeModernizeHub" class="action-btn">Close</button>
   `);
@@ -605,6 +630,18 @@ function openModernizationHub() {
     tryModernize();
   });
   document.getElementById("closeModernizeHub")?.addEventListener("click", closeModal);
+}
+
+function updateModernizationHubLive() {
+  const tokensEl = document.getElementById("modTokens");
+  const rewardEl = document.getElementById("modReward");
+  const costEl = document.getElementById("modCost");
+  const runBtn = document.getElementById("modernizeRun");
+  if (!tokensEl || !rewardEl || !costEl || !runBtn) return;
+  tokensEl.textContent = fmt(state.resources.tokens);
+  rewardEl.textContent = `${calcModernizationReward()}`;
+  costEl.textContent = fmt(modernizationCost());
+  runBtn.disabled = !(state.resources.cash >= modernizationCost() && calcModernizationReward() >= 1);
 }
 
 function hardReset() {
@@ -638,6 +675,7 @@ function tickModifier(now) {
 }
 
 function showStats() {
+  activeModal = "stats";
   setDrawerOpen(false);
   openModal(`
     <h3>Factory Stats</h3>
@@ -782,7 +820,11 @@ function renderSkills() {
   el.skillBranches.innerHTML = grouped.map((b) => {
     const branchSkills = skillDefs.filter((s) => s.branch === b);
     const owned = branchSkills.filter((s) => state.skills.includes(s.id)).length;
-    return `<div class="branch"><div class="row-head"><strong>${b}</strong><span>${owned}/${branchSkills.length}</span></div><div class="nodes">${branchSkills.map((s) => `<button class="node ${s.keystone ? "keystone" : ""} ${state.skills.includes(s.id) ? "owned" : ""}" data-skill="${s.id}">${s.name}<br/>${state.skills.includes(s.id) ? "Owned" : `${s.cost} RP`}</button>`).join("")}</div></div>`;
+    return `<div class="branch"><div class="row-head"><strong>${b}</strong><span>${owned}/${branchSkills.length}</span></div><div class="nodes">${branchSkills.map((s) => {
+      const ownedNode = state.skills.includes(s.id);
+      const canBuy = state.resources.research >= s.cost;
+      return `<button class="node ${s.keystone ? "keystone" : ""} ${ownedNode ? "owned" : ""} ${(!ownedNode && canBuy) ? "affordable" : ""}" data-skill="${s.id}" ${ownedNode || !canBuy ? "disabled" : ""}>${s.name}<br/>${ownedNode ? "Owned" : `${s.cost} RP`}</button>`;
+    }).join("")}</div></div>`;
   }).join("");
 
   el.skillBranches.querySelectorAll("button[data-skill]").forEach((btn) => btn.addEventListener("click", () => buySkill(btn.dataset.skill)));
