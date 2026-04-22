@@ -514,11 +514,11 @@ function renderAll() {
 
 function renderHUD() {
   const labels = {
-    cash: "Cash",
-    research: "Research",
-    reputation: "Reputation",
-    parts: "Parts",
-    tokens: "Tokens"
+    cash: "💵 Cash",
+    research: "🧪 Research",
+    reputation: "⭐ Reputation",
+    parts: "⚙️ Parts",
+    tokens: "🏅 Tokens"
   };
   const resourceMarkup = RESOURCES.map((k) => `<div class="res-pill"><div class="k">${labels[k]}</div><div class="v">${k === "cash" ? "$" : ""}${fmt(state.resources[k] || 0)}</div></div>`).join("");
   if (resourceMarkup !== hudCache.resources && el.resourceStrip) {

@@ -1,13 +1,13 @@
 :root {
-  --bg: #0f1524;
-  --panel: #1a2438;
-  --panel-alt: #202d46;
-  --text: #eaf2ff;
-  --sub: #9fb3d1;
-  --accent: #4fd7ff;
-  --accent2: #70ff9e;
-  --warn: #ff8b6b;
-  --gold: #fbcf5c;
+  --bg: #0b1221;
+  --panel: #18263f;
+  --panel-alt: #1f3150;
+  --text: #eef5ff;
+  --sub: #9cb1d2;
+  --accent: #53d8ff;
+  --accent2: #7effbb;
+  --warn: #ff977a;
+  --gold: #ffd46e;
 }
 
 * {
@@ -18,7 +18,9 @@
 body {
   margin: 0;
   font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-  background: radial-gradient(circle at 30% 20%, #1a2f4d 0%, #0f1524 45%, #0a101c 100%);
+  background:
+    radial-gradient(circle at 24% 14%, #274a7a 0%, #101b2e 36%, #090f1b 100%),
+    linear-gradient(180deg, #0d1424, #070d18);
   color: var(--text);
 }
 
@@ -28,6 +30,16 @@ body {
   margin: 0 auto;
   position: relative;
   padding-bottom: 72px;
+  isolation: isolate;
+}
+
+.app::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 80% 20%, rgba(80, 165, 255, 0.08), transparent 40%);
+  z-index: -1;
 }
 
 .topbar {
@@ -38,8 +50,9 @@ body {
   position: sticky;
   top: 0;
   z-index: 20;
-  background: linear-gradient(180deg, rgba(10, 16, 28, 0.95), rgba(10, 16, 28, 0.7));
-  backdrop-filter: blur(4px);
+  background: linear-gradient(180deg, rgba(8, 14, 24, 0.94), rgba(8, 14, 24, 0.66));
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid rgba(83, 143, 223, 0.22);
 }
 
 h1 {
@@ -66,14 +79,15 @@ h1 {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 6px;
-  padding: 0 12px 10px;
+  padding: 2px 12px 10px;
 }
 
 .res-pill {
-  background: rgba(26, 36, 56, 0.92);
-  border: 1px solid #2f4266;
+  background: linear-gradient(180deg, rgba(28, 43, 67, 0.95), rgba(17, 30, 48, 0.95));
+  border: 1px solid rgba(78, 112, 157, 0.7);
   border-radius: 10px;
-  padding: 6px;
+  padding: 7px 6px;
+  box-shadow: inset 0 1px 0 rgba(178, 218, 255, 0.1), 0 8px 16px rgba(7, 12, 22, 0.32);
 }
 
 .res-pill .k {
@@ -84,7 +98,7 @@ h1 {
 .res-pill .v {
   margin-top: 1px;
   font-weight: 700;
-  font-size: 0.85rem;
+  font-size: 0.88rem;
 }
 
 .screen-container {
@@ -92,11 +106,12 @@ h1 {
 }
 
 .hero-panel {
-  background: linear-gradient(180deg, rgba(29, 48, 75, 0.95), rgba(19, 31, 51, 0.95));
-  border: 1px solid #3c5a84;
+  background: linear-gradient(160deg, rgba(38, 60, 92, 0.95), rgba(20, 33, 54, 0.95));
+  border: 1px solid rgba(100, 149, 210, 0.66);
   border-radius: 16px;
   padding: 12px;
   margin-bottom: 10px;
+  box-shadow: 0 14px 28px rgba(6, 11, 21, 0.35), inset 0 1px 0 rgba(196, 225, 255, 0.08);
 }
 
 .hero-revenue {
@@ -112,9 +127,10 @@ h1 {
 
 .hero-revenue h2 {
   margin: 2px 0;
-  font-size: 1.9rem;
+  font-size: 2rem;
   line-height: 1;
-  color: #baf8ff;
+  color: #d3f8ff;
+  text-shadow: 0 0 14px rgba(92, 222, 255, 0.35);
 }
 
 .hero-sub {
@@ -134,7 +150,7 @@ h1 {
   border: 1px solid #4b6e9a;
   border-radius: 12px;
   padding: 8px 10px;
-  background: rgba(14, 23, 39, 0.55);
+  background: linear-gradient(180deg, rgba(16, 28, 45, 0.7), rgba(11, 19, 33, 0.72));
   color: var(--accent2);
   font-size: 0.79rem;
   font-weight: 600;
@@ -163,10 +179,11 @@ h1 {
   position: relative;
   height: 280px;
   border-radius: 16px;
-  border: 1px solid #2e4366;
+  border: 1px solid rgba(76, 116, 171, 0.6);
   overflow: hidden;
-  background: linear-gradient(180deg, #1b2942, #121c30);
+  background: linear-gradient(180deg, #1a2b45, #111b2f);
   margin-bottom: 12px;
+  box-shadow: 0 16px 30px rgba(5, 10, 19, 0.42), inset 0 1px 0 rgba(173, 215, 255, 0.07);
 }
 
 .factory-view::before,
@@ -507,19 +524,21 @@ h1 {
 }
 
 .card {
-  background: rgba(25, 35, 54, 0.95);
-  border: 1px solid #30476b;
+  background: linear-gradient(180deg, rgba(25, 37, 57, 0.96), rgba(20, 31, 49, 0.96));
+  border: 1px solid rgba(74, 109, 157, 0.66);
   border-radius: 14px;
   padding: 10px;
   margin-bottom: 10px;
+  box-shadow: 0 12px 24px rgba(6, 10, 18, 0.3);
 }
 
 .action-dock {
-  background: rgba(23, 34, 53, 0.96);
-  border: 1px solid #3c567f;
+  background: linear-gradient(180deg, rgba(25, 38, 60, 0.96), rgba(18, 30, 49, 0.96));
+  border: 1px solid rgba(85, 124, 178, 0.72);
   border-radius: 16px;
   padding: 10px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
+  box-shadow: 0 12px 24px rgba(5, 10, 18, 0.36);
 }
 
 .primary-btn, .action-btn {
@@ -531,7 +550,8 @@ h1 {
   font-size: 1.02rem;
   color: #07263d;
   background: linear-gradient(180deg, #75e6ff, #4fcfff);
-  box-shadow: 0 8px 18px rgba(79, 207, 255, 0.25);
+  box-shadow: 0 10px 20px rgba(79, 207, 255, 0.34);
+  transition: transform 120ms ease, box-shadow 160ms ease, filter 160ms ease;
 }
 
 .primary-btn:active {
@@ -541,8 +561,14 @@ h1 {
 .action-btn {
   margin-top: 6px;
   color: var(--text);
-  background: #2a3f60;
-  border: 1px solid #486991;
+  background: linear-gradient(180deg, #324f77, #284262);
+  border: 1px solid #5f84b3;
+  box-shadow: 0 6px 12px rgba(9, 16, 29, 0.3);
+}
+
+.action-btn:not(:disabled):active {
+  transform: scale(0.98);
+  filter: brightness(1.06);
 }
 
 .action-btn:disabled {
@@ -625,7 +651,7 @@ h1 {
 
 .row {
   background: var(--panel-alt);
-  border: 1px solid #3a5379;
+  border: 1px solid #48668f;
   border-radius: 10px;
   padding: 8px;
 }
@@ -695,8 +721,9 @@ h1 {
   grid-template-columns: repeat(4, 1fr);
   gap: 4px;
   padding: 6px;
-  background: rgba(11, 17, 28, 0.95);
-  border-top: 1px solid #2e4467;
+  background: linear-gradient(180deg, rgba(9, 15, 25, 0.94), rgba(7, 11, 19, 0.98));
+  border-top: 1px solid rgba(72, 105, 149, 0.65);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.36);
 }
 
 .tab {
@@ -705,12 +732,19 @@ h1 {
   padding: 9px 4px;
   font-size: 0.78rem;
   color: var(--sub);
-  background: #16233a;
+  background: linear-gradient(180deg, #1c2d49, #162640);
+  transition: transform 120ms ease, filter 120ms ease;
 }
 
 .tab.active {
   color: var(--text);
-  background: #2c466c;
+  background: linear-gradient(180deg, #385983, #2b4568);
+  box-shadow: inset 0 1px 0 rgba(196, 225, 255, 0.12);
+}
+
+.tab:active {
+  transform: scale(0.97);
+  filter: brightness(1.06);
 }
 
 .side-menu {
@@ -719,8 +753,8 @@ h1 {
   top: 0;
   bottom: 0;
   width: 270px;
-  background: #131d30;
-  border-left: 1px solid #355075;
+  background: linear-gradient(180deg, #16243a, #121f33);
+  border-left: 1px solid #4b6d99;
   z-index: 30;
   padding: 14px;
   transition: right 0.25s ease;
@@ -735,7 +769,7 @@ h1 {
   margin: 6px 0;
   border-radius: 8px;
   border: 1px solid #476892;
-  background: #273c5f;
+  background: linear-gradient(180deg, #2d466f, #223a5c);
   color: var(--text);
   padding: 9px;
 }
