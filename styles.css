@@ -577,6 +577,39 @@ h1 {
   filter: grayscale(0.3);
 }
 
+.text-input {
+  width: 100%;
+  margin-top: 6px;
+  border-radius: 10px;
+  border: 1px solid #5f84b3;
+  background: #18283f;
+  color: var(--text);
+  padding: 10px 9px;
+  font-size: 0.85rem;
+}
+
+.modal h4 {
+  margin: 10px 0 6px;
+  color: #bcd8ff;
+  font-size: 0.84rem;
+}
+
+body.modernize-flash::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(114, 240, 255, 0.26), rgba(114, 240, 255, 0));
+  animation: modernizeFlash 650ms ease-out;
+  z-index: 9999;
+}
+
+@keyframes modernizeFlash {
+  0% { opacity: 0; }
+  18% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 .primary-btn:disabled {
   opacity: 0.55;
 }

@@ -113,11 +113,19 @@ const defaultState = () => ({
   savedAt: Date.now(),
   playtime: 0,
   modernizationCount: 0,
+  advancedTech: { points: 0, unlocked: false },
   metaUpgrades: {
-    kickstart: 0,
-    contractMastery: 0,
-    offlineLab: 0,
-    blueprintIntel: 0
+    startCash: 0,
+    startupMomentum: 0,
+    lineCalibration: 0,
+    costEngineering: 0,
+    contractNegotiation: 0,
+    rareContractSignal: 0,
+    fragmentMagnet: 0,
+    fragmentRefining: 0,
+    offlineLogistics: 0,
+    offlineCap: 0,
+    autoClaim: 0
   },
   settings: {
     showFloatingNumbers: true,
@@ -353,14 +361,15 @@ function calcWindowsPerSec() {
   const skillBoost = 1 + state.modifiers.prod;
   const tokenBoost = 1 + state.resources.tokens * 0.018;
   const rushBoost = Date.now() < state.rush.activeUntil ? 1.55 + state.modifiers.rushPower : 1;
-  const kickoffBoost = 1 + state.metaUpgrades.kickstart * 0.015;
+  const startupBoost = 1 + state.metaUpgrades.startupMomentum * (state.totalEarned < 20000 ? 0.018 : 0.01);
+  const calibrationBoost = 1 + state.metaUpgrades.lineCalibration * 0.015;
 
   let modifierMul = 1;
   if (state.activeModifier && state.activeModifier.prodMul) modifierMul *= state.activeModifier.prodMul;
 
   if (state.flags.continuousCasting) wps *= 1.12;
   if (state.flags.zeroDefect) wps *= 0.95;
-  return wps * divBoost * skillBoost * tokenBoost * rushBoost * modifierMul * kickoffBoost;
+  return wps * divBoost * skillBoost * tokenBoost * rushBoost * modifierMul * startupBoost * calibrationBoost;
 }
 
 function cashPerWindow() {
@@ -374,6 +383,7 @@ function cashPerWindow() {
 function lineUpgradeCost(line) {
   const lv = state.lines[line.id].level;
   let discount = 1 - Math.min(0.18, state.modifiers.costDiscount);
+  discount *= 1 - Math.min(0.2, state.metaUpgrades.costEngineering * 0.01);
   if (state.flags.unionMomentum) discount *= 1.04;
   return Math.ceil(line.baseCost * Math.pow(1.47, lv) * discount);
 }
@@ -494,6 +504,9 @@ function markContractCompleted() {
   c.progress = c.targetWindows;
   toast(`Contract complete: ${c.name}. Claim reward.`);
   renderContracts();
+  if (state.metaUpgrades.autoClaim > 0) {
+    claimContractReward();
+  }
 }
 
 function failContract() {
@@ -509,7 +522,7 @@ function claimContractReward() {
   const c = state.contract;
   if (!c || c.status !== "completed" || c.rewardGranted) return;
   c.rewardGranted = true;
-  const mastery = state.metaUpgrades.contractMastery * 0.04;
+  const mastery = state.metaUpgrades.contractNegotiation * 0.03;
   let mult = 1 + Math.min(0.32, state.modifiers.contractReward) + mastery;
   if (c.type === "Premium") mult += state.modifiers.premiumContractReward;
   if (state.flags.continuousCasting) mult *= 0.9;
@@ -522,8 +535,10 @@ function claimContractReward() {
   if (state.flags.priorityPipeline && Math.random() < 0.1) state.resources.parts += 2;
   applyContractSpecial(c, mult);
 
-  const intelligenceBonus = state.metaUpgrades.blueprintIntel * 0.06;
-  const fragGain = Math.max(0, Math.round((c.fragmentReward || 0) * (1 + intelligenceBonus)));
+  const intelligenceBonus = state.metaUpgrades.fragmentMagnet * 0.05;
+  const refinementBonus = state.metaUpgrades.fragmentRefining * 0.03;
+  let fragGain = Math.max(0, Math.round((c.fragmentReward || 0) * (1 + intelligenceBonus + refinementBonus)));
+  if (Math.random() < state.metaUpgrades.rareContractSignal * 0.012) fragGain += 1;
   state.blueprintFragments += fragGain;
   unlockBlueprintsFromFragments();
 
@@ -594,102 +609,228 @@ function convertResearch() {
 }
 
 function modernizationCost() {
-  return 130000 * Math.pow(1.85, state.modernizationCount);
+  return 120000 * Math.pow(1.72, state.modernizationCount);
 }
 
-function calcModernizationReward() {
-  const score = state.totalEarned / 220000 + state.completedContracts * 0.14 + state.resources.reputation * 0.035;
-  return Math.max(0, Math.floor(Math.pow(score, 0.68)));
+function calcRunEfficiency(stats = state) {
+  const seconds = Math.max(1, stats.playtime);
+  const windowsPerSec = stats.windowsMade / seconds;
+  return Math.max(0.65, Math.min(1.75, windowsPerSec / 3.4));
 }
 
-function tryModernize() {
-  const cost = modernizationCost();
+function calcModernizationReward(stats = state) {
+  const revenueFactor = Math.pow(Math.max(0, stats.totalEarned) / 180000, 0.72) * 4.4;
+  const contractFactor = Math.pow(Math.max(0, stats.completedContracts), 0.84) * 0.95;
+  const blueprintFactor = Math.pow(Math.max(0, stats.blueprints.length), 1.18) * 2.15;
+  const efficiencyFactor = Math.max(0, (calcRunEfficiency(stats) - 0.85) * 3.8);
+  const rawScore = revenueFactor + contractFactor + blueprintFactor + efficiencyFactor;
+  const playMin = Math.max(0, stats.playtime / 60);
+  const shortRunPenalty = playMin < 8 ? 0.28 + (playMin / 8) * 0.72 : 1;
+  const longevityBonus = 1 + Math.min(0.38, Math.log1p(playMin) / 11);
+  const resetDiminish = 1 / (1 + state.modernizationCount * 0.06);
+  const tokenFloat = rawScore * shortRunPenalty * longevityBonus * resetDiminish;
+  return Math.max(0, Math.floor(tokenFloat));
+}
+
+function calcModernizationAnalysis() {
   const reward = calcModernizationReward();
-  if (state.resources.cash < cost || reward < 1) {
-    toast("Modernization not ready yet.");
-    return;
-  }
-  openModal(`
-    <h3>Factory Modernization</h3>
-    <p>Reset lines, divisions, skills and contracts to gain <strong>${reward} Modernization Tokens</strong>.</p>
-    <button class="action-btn" id="confirmModernize">Proceed</button>
-  `);
-  document.getElementById("confirmModernize").addEventListener("click", () => {
-    state.resources.tokens += reward;
-    state.modernizationCount += 1;
-    const preservedTokens = state.resources.tokens;
-    const preservedMeta = { ...state.metaUpgrades };
-    state = defaultState();
-    state.resources.tokens = preservedTokens;
-    state.metaUpgrades = preservedMeta;
-    state.resources.cash += state.metaUpgrades.kickstart * 40;
-    toast(`Modernized! +${reward} tokens.`);
-    closeModal();
-    renderAll();
-  });
+  const playMin = state.playtime / 60;
+  const efficiency = calcRunEfficiency();
+  const shortPenalty = playMin < 8 ? 0.28 + (playMin / 8) * 0.72 : 1;
+  const longevityBonus = 1 + Math.min(0.38, Math.log1p(Math.max(0, playMin)) / 11);
+  const nextTarget = reward + 1;
+  const extraRevenue = estimateRevenueForTargetTokens(nextTarget);
+  return {
+    reward,
+    cost: modernizationCost(),
+    ready: state.resources.cash >= modernizationCost() && reward > 0,
+    efficiency,
+    shortPenalty,
+    longevityBonus,
+    nextTarget,
+    extraRevenue
+  };
 }
 
-function modernizationUpgradeCost(key) {
-  const lvl = state.metaUpgrades[key] || 0;
-  return 1 + lvl;
+function estimateRevenueForTargetTokens(targetTokens) {
+  if (targetTokens <= calcModernizationReward()) return 0;
+  let add = 0;
+  for (let i = 0; i < 70; i += 1) {
+    add += 40000 + i * 7000;
+    const simulated = { ...state, totalEarned: state.totalEarned + add };
+    if (calcModernizationReward(simulated) >= targetTokens) return add;
+  }
+  return null;
+}
+
+function getModernizationUpgradeDefs() {
+  return [
+    { key: "startCash", category: "Early Game Boost", name: "Kickstart Treasury", desc: "+$55 starting cash per level", baseCost: 1, costMul: 1.45, max: 15 },
+    { key: "startupMomentum", category: "Early Game Boost", name: "Startup Momentum", desc: "+1.8% early-run production per level", baseCost: 1, costMul: 1.6, max: 12 },
+    { key: "lineCalibration", category: "Production Efficiency", name: "Line Calibration", desc: "+1.5% production speed per level", baseCost: 2, costMul: 1.58, max: 20 },
+    { key: "costEngineering", category: "Production Efficiency", name: "Cost Engineering", desc: "-1% line upgrade cost per level", baseCost: 2, costMul: 1.65, max: 20 },
+    { key: "contractNegotiation", category: "Contracts", name: "Negotiation Office", desc: "+3% contract reward multiplier per level", baseCost: 2, costMul: 1.62, max: 15 },
+    { key: "rareContractSignal", category: "Contracts", name: "Rare Contract Signal", desc: "Small chance for +1 extra fragment on claims", baseCost: 3, costMul: 1.7, max: 12 },
+    { key: "fragmentMagnet", category: "Blueprint System", name: "Fragment Magnet", desc: "+5% fragment gains per level", baseCost: 2, costMul: 1.63, max: 18 },
+    { key: "fragmentRefining", category: "Blueprint System", name: "Fragment Refinery", desc: "+3% fragment gains per level", baseCost: 3, costMul: 1.72, max: 15 },
+    { key: "offlineLogistics", category: "Offline Progress", name: "Offline Logistics", desc: "+10% offline earnings per level", baseCost: 2, costMul: 1.58, max: 15 },
+    { key: "offlineCap", category: "Offline Progress", name: "Offline Capacity", desc: "+5 min offline cap per level", baseCost: 1, costMul: 1.52, max: 18 },
+    { key: "autoClaim", category: "Quality of Life", name: "Auto Claim Contracts", desc: "Automatically claims completed contracts", baseCost: 8, costMul: 2.2, max: 1 }
+  ];
+}
+
+function modernizationUpgradeCost(def) {
+  const lvl = state.metaUpgrades[def.key] || 0;
+  return Math.ceil(def.baseCost * Math.pow(def.costMul, lvl));
 }
 
 function buyModernizationUpgrade(key) {
-  const cost = modernizationUpgradeCost(key);
+  const def = getModernizationUpgradeDefs().find((u) => u.key === key);
+  if (!def) return;
+  const lvl = state.metaUpgrades[key] || 0;
+  if (lvl >= def.max) return;
+  const cost = modernizationUpgradeCost(def);
   if (state.resources.tokens < cost) return;
   state.resources.tokens -= cost;
-  state.metaUpgrades[key] = (state.metaUpgrades[key] || 0) + 1;
-  toast("Modernization protocol upgraded.");
+  state.metaUpgrades[key] = lvl + 1;
+  toast(`Modernization upgraded: ${def.name}`);
   openModernizationHub();
+}
+
+function tryModernize() {
+  const analysis = calcModernizationAnalysis();
+  if (!analysis.ready) {
+    toast("Modernization not efficient yet. Push this run further.");
+    return;
+  }
+  openModal(`
+    <h3>Confirm Factory Modernization</h3>
+    <p>If you reset now, you will earn <strong>${analysis.reward} Modernization Tokens</strong>.</p>
+    <p>Run summary: $${fmt(state.totalEarned)} revenue • ${state.completedContracts} contracts • ${state.blueprints.length} blueprints.</p>
+    <div class="row"><div class="row-head"><strong>Safety Check</strong><span>Required</span></div><div class="row-meta"><span>Type <strong>RESET</strong> to continue.</span><span></span></div><input id="modernizeConfirmText" class="text-input" placeholder="Type RESET"/></div>
+    <button class="action-btn" id="confirmModernize" disabled>Finalize Modernization</button>
+    <button class="action-btn" id="cancelModernize">Cancel</button>
+  `);
+  const confirmInput = document.getElementById("modernizeConfirmText");
+  const confirmBtn = document.getElementById("confirmModernize");
+  confirmInput?.addEventListener("input", () => {
+    confirmBtn.disabled = confirmInput.value.trim().toUpperCase() !== "RESET";
+  });
+  document.getElementById("confirmModernize")?.addEventListener("click", () => performModernize(analysis.reward));
+  document.getElementById("cancelModernize")?.addEventListener("click", openModernizationHub);
+}
+
+function performModernize(reward) {
+  const summary = {
+    revenue: state.totalEarned,
+    contracts: state.completedContracts,
+    blueprints: state.blueprints.length,
+    playtime: state.playtime,
+    reward
+  };
+  state.resources.tokens += reward;
+  state.modernizationCount += 1;
+  const preservedTokens = state.resources.tokens;
+  const preservedMeta = { ...state.metaUpgrades };
+  const preservedModernizationCount = state.modernizationCount;
+  const preservedAdvancedTech = { ...state.advancedTech };
+  state = defaultState();
+  state.resources.tokens = preservedTokens;
+  state.metaUpgrades = preservedMeta;
+  state.modernizationCount = preservedModernizationCount;
+  state.advancedTech = preservedAdvancedTech;
+  state.resources.cash += state.metaUpgrades.startCash * 55;
+  triggerModernizationEffect();
+  openModernizationSummary(summary);
+  renderAll();
+}
+
+function triggerModernizationEffect() {
+  document.body.classList.add("modernize-flash");
+  showRewardPopup("MODERNIZED");
+  setTimeout(() => document.body.classList.remove("modernize-flash"), 650);
+}
+
+function openModernizationSummary(summary) {
+  activeModal = "modernizationSummary";
+  openModal(`
+    <h3>Modernization Complete</h3>
+    <p>+<strong>${summary.reward}</strong> tokens secured for future runs.</p>
+    <div class="list">
+      <div class="row"><div class="row-head"><strong>Run Revenue</strong><span>$${fmt(summary.revenue)}</span></div></div>
+      <div class="row"><div class="row-head"><strong>Contracts Completed</strong><span>${summary.contracts}</span></div></div>
+      <div class="row"><div class="row-head"><strong>Blueprints Unlocked</strong><span>${summary.blueprints}</span></div></div>
+      <div class="row"><div class="row-head"><strong>Run Time</strong><span>${fmt(summary.playtime / 60)} min</span></div></div>
+    </div>
+    <button class="action-btn" id="closeModernizeSummary">Start New Run</button>
+  `);
+  document.getElementById("closeModernizeSummary")?.addEventListener("click", closeModal);
 }
 
 function openModernizationHub() {
   activeModal = "modernizationHub";
   setDrawerOpen(false);
-  const upgrades = [
-    { key: "kickstart", name: "Kickstart Capital", desc: "+$40 starting cash per level" },
-    { key: "contractMastery", name: "Contract Mastery", desc: "+4% contract rewards per level" },
-    { key: "offlineLab", name: "Offline Logistics", desc: "+12% offline gains per level" },
-    { key: "blueprintIntel", name: "Blueprint Intel", desc: "+2% blueprint chance per level" }
-  ];
-  const upgradeHtml = upgrades.map((u) => {
-    const lvl = state.metaUpgrades[u.key] || 0;
-    const cost = modernizationUpgradeCost(u.key);
-    const disabled = state.resources.tokens < cost ? "disabled" : "";
-    return `<div class="row"><div class="row-head"><strong>${u.name}</strong><span>Lv ${lvl}</span></div><div class="row-meta"><span>${u.desc}</span><span>Cost ${cost} 🏅</span></div><button class="action-btn" data-meta="${u.key}" ${disabled}>Invest</button></div>`;
+  const analysis = calcModernizationAnalysis();
+  const byCategory = getModernizationUpgradeDefs().reduce((acc, u) => {
+    if (!acc[u.category]) acc[u.category] = [];
+    acc[u.category].push(u);
+    return acc;
+  }, {});
+  const categoryHtml = Object.entries(byCategory).map(([category, upgrades]) => {
+    const rows = upgrades.map((u) => {
+      const lvl = state.metaUpgrades[u.key] || 0;
+      const maxed = lvl >= u.max;
+      const cost = modernizationUpgradeCost(u);
+      const disabled = maxed || state.resources.tokens < cost ? "disabled" : "";
+      const stateLabel = maxed ? "Maxed" : `Lv ${lvl}/${u.max}`;
+      return `<div class="row"><div class="row-head"><strong>${u.name}</strong><span>${stateLabel}</span></div><div class="row-meta"><span>${u.desc}</span><span>${maxed ? "MAX" : `Cost ${cost} 🏅`}</span></div>${maxed ? "" : `<button class="action-btn" data-meta="${u.key}" ${disabled}>Invest</button>`}</div>`;
+    }).join("");
+    return `<h4>${category}</h4><div class="list">${rows}</div>`;
   }).join("");
 
-  const ready = state.resources.cash >= modernizationCost() && calcModernizationReward() >= 1;
+  const efficiencyLabel = analysis.shortPenalty < 0.95 ? "Too Early" : (analysis.reward >= 4 ? "Efficient" : "Building");
+  const nextHint = analysis.extraRevenue == null ? "Long push needed for next token." : `Need about +$${fmt(analysis.extraRevenue)} more revenue for ${analysis.nextTarget} tokens.`;
+
   openModal(`
     <h3>Modernization Hub</h3>
-    <p>Tokens: <strong id="modTokens">${fmt(state.resources.tokens)}</strong></p>
-    <div class="list">${upgradeHtml}</div>
+    <p>Tokens: <strong id="modTokens">${fmt(state.resources.tokens)}</strong> • Advanced Tech Points: <strong>${fmt(state.advancedTech.points)}</strong> (Tier 2 locked)</p>
+    <div class="row">
+      <div class="row-head"><strong>Reset Preview</strong><span id="modEfficiency">${efficiencyLabel}</span></div>
+      <div class="row-meta"><span>If you reset now:</span><span><strong id="modReward">${analysis.reward}</strong> tokens</span></div>
+      <div class="row-meta"><span>Cash requirement</span><span>$<span id="modCost">${fmt(analysis.cost)}</span></span></div>
+      <div class="row-meta"><span>Run efficiency</span><span id="modRunEff">${(analysis.efficiency * 100).toFixed(0)}%</span></div>
+      <div class="row-meta"><span>Timing hint</span><span id="modNextHint">${nextHint}</span></div>
+    </div>
     <hr/>
-    <p>Reset current run for <strong id="modReward">${calcModernizationReward()}</strong> tokens (requires $<span id="modCost">${fmt(modernizationCost())}</span>).</p>
-    <button id="modernizeRun" class="action-btn" ${ready ? "" : "disabled"}>Modernize Run</button>
+    ${categoryHtml}
+    <button id="modernizeRun" class="action-btn" ${analysis.ready ? "" : "disabled"}>Modernize Run</button>
     <button id="closeModernizeHub" class="action-btn">Close</button>
   `);
 
   document.querySelectorAll("[data-meta]").forEach((btn) => {
     btn.addEventListener("click", () => buyModernizationUpgrade(btn.dataset.meta));
   });
-  document.getElementById("modernizeRun")?.addEventListener("click", () => {
-    closeModal();
-    tryModernize();
-  });
+  document.getElementById("modernizeRun")?.addEventListener("click", tryModernize);
   document.getElementById("closeModernizeHub")?.addEventListener("click", closeModal);
 }
 
 function updateModernizationHubLive() {
+  const analysis = calcModernizationAnalysis();
   const tokensEl = document.getElementById("modTokens");
   const rewardEl = document.getElementById("modReward");
   const costEl = document.getElementById("modCost");
   const runBtn = document.getElementById("modernizeRun");
-  if (!tokensEl || !rewardEl || !costEl || !runBtn) return;
+  const effEl = document.getElementById("modRunEff");
+  const hintEl = document.getElementById("modNextHint");
+  const statusEl = document.getElementById("modEfficiency");
+  if (!tokensEl || !rewardEl || !costEl || !runBtn || !effEl || !hintEl || !statusEl) return;
   tokensEl.textContent = fmt(state.resources.tokens);
-  rewardEl.textContent = `${calcModernizationReward()}`;
-  costEl.textContent = fmt(modernizationCost());
-  runBtn.disabled = !(state.resources.cash >= modernizationCost() && calcModernizationReward() >= 1);
+  rewardEl.textContent = `${analysis.reward}`;
+  costEl.textContent = fmt(analysis.cost);
+  effEl.textContent = `${(analysis.efficiency * 100).toFixed(0)}%`;
+  statusEl.textContent = analysis.shortPenalty < 0.95 ? "Too Early" : (analysis.reward >= 4 ? "Efficient" : "Building");
+  hintEl.textContent = analysis.extraRevenue == null ? "Long push needed for next token." : `Need about +$${fmt(analysis.extraRevenue)} more revenue for ${analysis.nextTarget} tokens.`;
+  runBtn.disabled = !analysis.ready;
 }
 
 function hardReset() {
@@ -1055,9 +1196,10 @@ function applyOfflineEarnings() {
     return;
   }
 
-  const cappedSec = Math.min(1200, offlineSec);
+  const capBonusMinutes = state.metaUpgrades.offlineCap * 5;
+  const cappedSec = Math.min((20 + capBonusMinutes) * 60, offlineSec);
   const offlineRate = calcWindowsPerSec() * cashPerWindow();
-  const offlineBoost = 1 + state.metaUpgrades.offlineLab * 0.12 + state.modifiers.offlineEfficiency + (state.flags.darkShift ? 0.2 : 0);
+  const offlineBoost = 1 + state.metaUpgrades.offlineLogistics * 0.1 + state.modifiers.offlineEfficiency + (state.flags.darkShift ? 0.2 : 0);
   const offlineGain = offlineRate * cappedSec * 0.2 * offlineBoost;
   if (offlineGain > 0) {
     state.resources.cash += offlineGain;
@@ -1216,8 +1358,13 @@ function loadState() {
 
 function normalizeState(incoming) {
   const next = incoming;
+  if (next.metaUpgrades?.kickstart) next.metaUpgrades.startCash += next.metaUpgrades.kickstart;
+  if (next.metaUpgrades?.contractMastery) next.metaUpgrades.contractNegotiation += next.metaUpgrades.contractMastery;
+  if (next.metaUpgrades?.offlineLab) next.metaUpgrades.offlineLogistics += next.metaUpgrades.offlineLab;
+  if (next.metaUpgrades?.blueprintIntel) next.metaUpgrades.fragmentMagnet += next.metaUpgrades.blueprintIntel;
   next.blueprints = (next.blueprints || []).filter((id) => blueprintDefs.some((bp) => bp.id === id));
   if (typeof next.blueprintFragments !== "number") next.blueprintFragments = 0;
+  if (!next.advancedTech) next.advancedTech = { points: 0, unlocked: false };
   if (next.contract && !next.contract.status) {
     const target = next.contract.targetWindows || next.contract.windows || 1;
     next.contract.targetWindows = target;
