@@ -197,9 +197,43 @@ h1 {
   z-index: 0;
 }
 
+.factory-bg-layer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(124, 177, 241, 0.05) 0 30px,
+    transparent 30px 60px
+  );
+  animation: bgSlide 11s linear infinite;
+}
+
 @keyframes pulseGrid {
   0%, 100% { opacity: 0.65; }
   50% { opacity: 1; }
+}
+
+@keyframes bgSlide {
+  from { transform: translateX(0); }
+  to { transform: translateX(60px); }
+}
+
+.energy-wave {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.energy-wave.fire {
+  animation: energySweep 800ms ease-out;
+}
+
+@keyframes energySweep {
+  0% { opacity: 0.75; background: linear-gradient(100deg, transparent 0%, rgba(93, 228, 255, 0.55) 35%, transparent 62%); transform: translateX(-50%); }
+  100% { opacity: 0; transform: translateX(60%); }
 }
 
 .factory-grid {
@@ -220,8 +254,8 @@ h1 {
   width: 74px;
   height: 54px;
   border-radius: 10px;
-  border: 1px solid #43689d;
-  background: linear-gradient(180deg, #2a466e, #1a2e48);
+  border: 1px solid #365070;
+  background: linear-gradient(180deg, #223956, #16283f);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -238,8 +272,8 @@ h1 {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #98f5ff;
-  box-shadow: 0 0 8px #8ce9ff;
+  background: #5d7f9a;
+  box-shadow: 0 0 4px #5d7f9a;
 }
 
 .machine .stage {
@@ -262,10 +296,16 @@ h1 {
 .machine.active {
   border-color: #79c8ff;
   box-shadow: 0 0 12px rgba(102, 207, 255, 0.28);
+  background: linear-gradient(180deg, #2a466e, #1a2e48);
 }
 
 .machine.active .stamp {
   animation: stampMove 1.2s ease-in-out infinite;
+}
+
+.machine.active .lamp {
+  background: #9ff8ff;
+  box-shadow: 0 0 10px #8ce9ff;
 }
 
 .machine.busy { animation: throb 0.45s ease; }
@@ -292,6 +332,24 @@ h1 {
   background: #26334f;
   border-radius: 999px;
   border: 1px solid #3b577f;
+  overflow: hidden;
+}
+
+.belt::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(124, 196, 255, 0.0) 0 10px,
+    rgba(124, 196, 255, 0.35) 10px 16px
+  );
+  animation: beltRun 900ms linear infinite;
+}
+
+@keyframes beltRun {
+  from { transform: translateX(-16px); }
+  to { transform: translateX(0); }
 }
 
 .item {
@@ -366,6 +424,19 @@ h1 {
   border-radius: 999px;
 }
 
+.tick-pop {
+  position: absolute;
+  font-size: 0.56rem;
+  color: #8ee6ff;
+  animation: tickFloat 620ms ease-out forwards;
+}
+
+@keyframes tickFloat {
+  from { opacity: 0; transform: translateY(2px) scale(0.9); }
+  20% { opacity: 1; }
+  to { opacity: 0; transform: translateY(-10px) scale(1); }
+}
+
 .ticker {
   position: absolute;
   top: 10px;
@@ -388,6 +459,12 @@ h1 {
   font-weight: 700;
   text-shadow: 0 0 8px rgba(120, 255, 174, 0.5);
   animation: moneyRise 760ms ease-out forwards;
+}
+
+.money-pop.boost {
+  color: #c7ffd7;
+  font-size: 0.88rem;
+  text-shadow: 0 0 12px rgba(130, 255, 174, 0.75);
 }
 
 @keyframes moneyRise {
@@ -528,6 +605,32 @@ h1 {
 
 .factory-view.boosted .belt {
   filter: brightness(1.18);
+}
+
+.factory-view.boosted .belt::after {
+  animation-duration: 520ms;
+}
+
+.reward-pop {
+  position: absolute;
+  left: 50%;
+  top: 45%;
+  transform: translate(-50%, -50%);
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: rgba(34, 58, 86, 0.95);
+  border: 1px solid #7fd2ff;
+  color: #c9f1ff;
+  font-size: 0.75rem;
+  box-shadow: 0 0 18px rgba(106, 199, 255, 0.4);
+  animation: rewardPop 1200ms ease-out forwards;
+  z-index: 6;
+}
+
+@keyframes rewardPop {
+  0% { opacity: 0; transform: translate(-50%, -42%) scale(0.92); }
+  10%, 70% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -56%) scale(1.02); }
 }
 
 .section-card h2 {

@@ -128,6 +128,7 @@ const el = {
   goalLabel: document.getElementById("goalLabel"),
   incomeTicker: document.getElementById("incomeTicker"),
   factoryView: document.getElementById("factoryView"),
+  energyWave: document.getElementById("energyWave"),
   factoryGrid: document.getElementById("factoryGrid"),
   fxLayer: document.getElementById("fxLayer"),
   toastLayer: document.getElementById("toastLayer"),
@@ -217,7 +218,7 @@ function gameTick() {
   if (tickerFrame > flowInterval) {
     animateFlow();
     el.incomeTicker.textContent = `+$${fmt(cashGain / dt)}/s`;
-    if (cashGain > 0.01) spawnMoneyPop(cashGain / dt);
+    if (cashGain > 0.01) spawnMoneyPop(cashGain / dt, now <= state.rush.activeUntil);
     tickerFrame = 0;
   }
 
@@ -309,7 +310,11 @@ function activateRush() {
   state.rush.activeUntil = now + duration;
   state.rush.cooldownUntil = now + 32000 + cdPenalty;
   el.rushBtn.classList.add("boost-fire");
+  el.energyWave.classList.remove("fire");
+  void el.energyWave.offsetWidth;
+  el.energyWave.classList.add("fire");
   setTimeout(() => el.rushBtn.classList.remove("boost-fire"), 360);
+  setTimeout(() => el.energyWave.classList.remove("fire"), 800);
   if (state.flags.smartTint) state.resources.research += 1;
   toast("Rush Order accepted! Lines overclocked.");
 }
@@ -355,6 +360,7 @@ function completeContract() {
   }
 
   state.completedContracts += 1;
+  showRewardPopup(`Contract Complete +$${fmt((c.rewards.cash || 0) * mult)}`);
   toast(`Contract complete: ${c.name}`);
   state.contract = null;
 }
@@ -659,6 +665,7 @@ function animateFlow() {
     setTimeout(() => {
       item.remove();
       spawnCompletionBurst(path.to.x, path.to.y);
+      spawnTickPop(path.to.x + 8, path.to.y - 6);
     }, 1000);
   });
 }
@@ -668,6 +675,7 @@ function flashMachine(lineId) {
   if (!m) return;
   m.classList.add("busy");
   m.classList.add("upgraded");
+  showRewardPopup("Upgrade Installed");
   setTimeout(() => m.classList.remove("upgraded"), 520);
   setTimeout(() => m.classList.remove("busy"), 400);
 }
@@ -684,9 +692,9 @@ function updateMachineActivity() {
   });
 }
 
-function spawnMoneyPop(amountPerSec) {
+function spawnMoneyPop(amountPerSec, boosted = false) {
   const pop = document.createElement("div");
-  pop.className = "money-pop";
+  pop.className = `money-pop ${boosted ? "boost" : ""}`;
   pop.textContent = `+$${fmt(amountPerSec)}/s`;
   el.fxLayer.appendChild(pop);
   setTimeout(() => pop.remove(), 760);
@@ -699,6 +707,24 @@ function spawnCompletionBurst(x, y) {
   burst.style.top = `${y}px`;
   el.fxLayer.appendChild(burst);
   setTimeout(() => burst.remove(), 460);
+}
+
+function spawnTickPop(x, y) {
+  const tick = document.createElement("div");
+  tick.className = "tick-pop";
+  tick.textContent = "✓";
+  tick.style.left = `${x}px`;
+  tick.style.top = `${y}px`;
+  el.fxLayer.appendChild(tick);
+  setTimeout(() => tick.remove(), 620);
+}
+
+function showRewardPopup(text) {
+  const pop = document.createElement("div");
+  pop.className = "reward-pop";
+  pop.textContent = text;
+  el.fxLayer.appendChild(pop);
+  setTimeout(() => pop.remove(), 1200);
 }
 
 function applyOfflineEarnings() {
