@@ -9,25 +9,17 @@
 <body>
   <div id="app" class="app">
     <header class="topbar">
-      <div class="title-wrap">
-        <h1>Window Factory Tycoon</h1>
-        <p class="goal">Factory Command</p>
-      </div>
+      <section class="resource-strip" id="resourceStrip"></section>
       <button id="menuButton" class="menu-btn">☰</button>
     </header>
 
-    <section class="resource-strip" id="resourceStrip"></section>
-
     <main class="screen-container">
       <section id="screen-home" class="screen active">
-        <div class="hero-panel">
-          <div class="hero-revenue">
-            <p class="hero-label">Factory Revenue</p>
-            <h2 id="rpsLabel">$0</h2>
-            <p class="hero-sub">per second • <span id="wpsLabel">0</span> windows/sec</p>
-            <p class="hero-cash">Cash on hand: <strong id="cashFocus">$0</strong></p>
-          </div>
-          <div class="goal-chip" id="goalLabel">Goal: Upgrade the Cutter to Lv 2</div>
+        <div class="info-strip">
+          <span>Income <strong id="rpsLabel">$0</strong>/s</span>
+          <span>Output <strong id="wpsLabel">0</strong> w/s</span>
+          <span>Cash <strong id="cashFocus">$0</strong></span>
+          <span id="goalLabel">Goal: Upgrade the Cutter</span>
         </div>
 
         <div class="factory-view" id="factoryView">
@@ -58,11 +50,14 @@
         </div>
       </section>
 
-      <section id="screen-upgrades" class="screen">
+      <section id="screen-skills" class="screen">
         <div class="card section-card">
           <h2>Skill Tree</h2>
           <div id="skillBranches" class="skill-branches"></div>
         </div>
+      </section>
+      
+      <section id="screen-blueprints" class="screen">
         <div class="card section-card">
           <h2>Blueprints</h2>
           <div id="blueprintList" class="list"></div>
@@ -84,7 +79,8 @@
     <nav class="bottom-nav">
       <button data-tab="home" class="tab active">Home</button>
       <button data-tab="factory" class="tab">Factory</button>
-      <button data-tab="upgrades" class="tab">Upgrades</button>
+      <button data-tab="skills" class="tab">Skills</button>
+      <button data-tab="blueprints" class="tab">Blueprints</button>
       <button data-tab="contracts" class="tab">Contracts</button>
     </nav>
 

@@ -358,8 +358,10 @@ function refreshDynamicViews(dt) {
   if (activeScreen === "screen-contracts" || state.contract) {
     renderContracts();
   }
-  if (activeScreen === "screen-upgrades") {
+  if (activeScreen === "screen-skills") {
     renderSkills();
+  }
+  if (activeScreen === "screen-blueprints") {
     renderBlueprints();
   }
   if (activeModal === "modernizationHub") {
