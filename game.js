@@ -112,6 +112,7 @@ const defaultState = () => ({
 let state = loadState();
 let tickerFrame = 0;
 let goalReadyLastTick = false;
+let hudCache = { resources: "", rps: "", wps: "", goal: "", cash: "" };
 
 const el = {
   resourceStrip: document.getElementById("resourceStrip"),
@@ -125,6 +126,7 @@ const el = {
   rushStatus: document.getElementById("rushStatus"),
   rpsLabel: document.getElementById("rpsLabel"),
   wpsLabel: document.getElementById("wpsLabel"),
+  cashFocus: document.getElementById("cashFocus"),
   goalLabel: document.getElementById("goalLabel"),
   incomeTicker: document.getElementById("incomeTicker"),
   factoryView: document.getElementById("factoryView"),
@@ -137,12 +139,34 @@ const el = {
   modifierBanner: document.getElementById("modifierBanner")
 };
 
+validateConfig();
 bootstrapFactoryVisual();
 bindEvents();
 applyOfflineEarnings();
 renderAll();
 setInterval(gameTick, 250);
 setInterval(autoSave, 10000);
+
+function validateConfig() {
+  const unique = (arr, label) => {
+    const ids = arr.map((x) => x.id);
+    if (new Set(ids).size !== ids.length) {
+      console.warn(`Duplicate ${label} IDs detected.`);
+    }
+  };
+  unique(lineDefs, "line");
+  unique(divisionDefs, "division");
+  unique(contracts, "contract");
+  unique(skillDefs, "skill");
+  unique(blueprintDefs, "blueprint");
+
+  lineDefs.forEach((line) => {
+    if (line.unlockReq && !lineDefs.find((x) => x.id === line.unlockReq.line)) {
+      console.warn(`Invalid unlock requirement on line: ${line.id}`);
+      line.unlockReq = null;
+    }
+  });
+}
 
 function bindEvents() {
   document.querySelectorAll(".tab").forEach((tabBtn) => {
@@ -151,21 +175,22 @@ function bindEvents() {
       tabBtn.classList.add("active");
       const target = tabBtn.dataset.tab;
       document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
-      document.getElementById(`screen-${target}`).classList.add("active");
+      const screen = document.getElementById(`screen-${target}`);
+      if (screen) screen.classList.add("active");
     });
   });
 
-  document.getElementById("rushBtn").addEventListener("click", activateRush);
-  document.getElementById("menuButton").addEventListener("click", () => el.sideMenu.classList.toggle("open"));
+  document.getElementById("rushBtn")?.addEventListener("click", activateRush);
+  document.getElementById("menuButton")?.addEventListener("click", () => el.sideMenu?.classList.toggle("open"));
 
-  document.getElementById("researchBtn").addEventListener("click", convertResearch);
-  document.getElementById("prestigeBtn").addEventListener("click", tryModernize);
-  document.getElementById("statsBtn").addEventListener("click", showStats);
-  document.getElementById("saveBtn").addEventListener("click", () => {
+  document.getElementById("researchBtn")?.addEventListener("click", convertResearch);
+  document.getElementById("prestigeBtn")?.addEventListener("click", tryModernize);
+  document.getElementById("statsBtn")?.addEventListener("click", showStats);
+  document.getElementById("saveBtn")?.addEventListener("click", () => {
     autoSave();
     toast("Game saved.");
   });
-  document.getElementById("resetBtn").addEventListener("click", hardReset);
+  document.getElementById("resetBtn")?.addEventListener("click", hardReset);
 }
 
 function gameTick() {
@@ -211,13 +236,13 @@ function gameTick() {
     el.rushStatus.textContent = "Tap to overclock lines and push your next upgrade.";
   }
 
-  el.factoryView.classList.toggle("boosted", now <= state.rush.activeUntil);
+  el.factoryView?.classList.toggle("boosted", now <= state.rush.activeUntil);
 
   tickerFrame += dt;
   const flowInterval = now <= state.rush.activeUntil ? 0.55 : 1;
   if (tickerFrame > flowInterval) {
     animateFlow();
-    el.incomeTicker.textContent = `+$${fmt(cashGain / dt)}/s`;
+    if (el.incomeTicker) el.incomeTicker.textContent = `+$${fmt(cashGain / dt)}/s`;
     if (cashGain > 0.01) spawnMoneyPop(cashGain / dt, now <= state.rush.activeUntil);
     tickerFrame = 0;
   }
@@ -283,6 +308,7 @@ function timeToAffordLabel(seconds) {
 
 function buyLine(lineId) {
   const def = lineDefs.find((x) => x.id === lineId);
+  if (!def) return;
   if (!isLineUnlocked(def)) return;
   const cost = lineUpgradeCost(def);
   if (state.resources.cash < cost) return;
@@ -295,6 +321,7 @@ function buyLine(lineId) {
 
 function unlockDivision(id) {
   const div = divisionDefs.find((d) => d.id === id);
+  if (!div) return;
   if (state.divisions[id] || state.resources.cash < div.reqCash) return;
   state.resources.cash -= div.reqCash;
   state.divisions[id] = true;
@@ -309,12 +336,14 @@ function activateRush() {
   const cdPenalty = state.activeModifier?.rushCdAdd ? state.activeModifier.rushCdAdd * 1000 : 0;
   state.rush.activeUntil = now + duration;
   state.rush.cooldownUntil = now + 32000 + cdPenalty;
-  el.rushBtn.classList.add("boost-fire");
-  el.energyWave.classList.remove("fire");
-  void el.energyWave.offsetWidth;
-  el.energyWave.classList.add("fire");
-  setTimeout(() => el.rushBtn.classList.remove("boost-fire"), 360);
-  setTimeout(() => el.energyWave.classList.remove("fire"), 800);
+  el.rushBtn?.classList.add("boost-fire");
+  if (el.energyWave) {
+    el.energyWave.classList.remove("fire");
+    void el.energyWave.offsetWidth;
+    el.energyWave.classList.add("fire");
+    setTimeout(() => el.energyWave.classList.remove("fire"), 800);
+  }
+  setTimeout(() => el.rushBtn?.classList.remove("boost-fire"), 360);
   if (state.flags.smartTint) state.resources.research += 1;
   toast("Rush Order accepted! Lines overclocked.");
 }
@@ -322,6 +351,7 @@ function activateRush() {
 function startContract(id) {
   if (state.contract) return;
   const c = contracts.find((x) => x.id === id);
+  if (!c) return;
   if (state.resources.reputation < c.minRep) return;
   state.contract = { ...c, remaining: c.duration, progress: 0 };
   toast(`Contract started: ${c.name}`);
@@ -377,6 +407,7 @@ function awardBlueprint() {
 function buySkill(skillId) {
   if (state.skills.includes(skillId)) return;
   const skill = skillDefs.find((x) => x.id === skillId);
+  if (!skill) return;
   if (state.resources.research < skill.cost) return;
   state.resources.research -= skill.cost;
   state.skills.push(skillId);
@@ -489,10 +520,27 @@ function renderHUD() {
     parts: "Parts",
     tokens: "Tokens"
   };
-  el.resourceStrip.innerHTML = RESOURCES.map((k) => `<div class="res-pill"><div class="k">${labels[k]}</div><div class="v">${k === "cash" ? "$" : ""}${fmt(state.resources[k])}</div></div>`).join("");
+  const resourceMarkup = RESOURCES.map((k) => `<div class="res-pill"><div class="k">${labels[k]}</div><div class="v">${k === "cash" ? "$" : ""}${fmt(state.resources[k] || 0)}</div></div>`).join("");
+  if (resourceMarkup !== hudCache.resources && el.resourceStrip) {
+    el.resourceStrip.innerHTML = resourceMarkup;
+    hudCache.resources = resourceMarkup;
+  }
 
-  el.rpsLabel.textContent = `$${fmt(calcWindowsPerSec() * cashPerWindow())}`;
-  el.wpsLabel.textContent = fmt(calcWindowsPerSec());
+  const currentRps = `$${fmt(calcWindowsPerSec() * cashPerWindow())}`;
+  const currentWps = fmt(calcWindowsPerSec());
+  const currentCash = `$${fmt(state.resources.cash || 0)}`;
+  if (el.rpsLabel && currentRps !== hudCache.rps) {
+    el.rpsLabel.textContent = currentRps;
+    hudCache.rps = currentRps;
+  }
+  if (el.wpsLabel && currentWps !== hudCache.wps) {
+    el.wpsLabel.textContent = currentWps;
+    hudCache.wps = currentWps;
+  }
+  if (el.cashFocus && currentCash !== hudCache.cash) {
+    el.cashFocus.textContent = currentCash;
+    hudCache.cash = currentCash;
+  }
 
   const goalTarget = lineDefs
     .map((line) => ({ line, cost: lineUpgradeCost(line), unlocked: isLineUnlocked(line) }))
@@ -502,9 +550,13 @@ function renderHUD() {
     })[0];
   const eta = secondsToAfford(goalTarget.cost);
   const etaLabel = timeToAffordLabel(eta);
-  el.goalLabel.textContent = `Goal: ${goalTarget.line.name} $${fmt(goalTarget.cost)} (${etaLabel})`;
+  const goalText = `Goal: ${goalTarget.line.name} $${fmt(goalTarget.cost)} (${etaLabel})`;
+  if (el.goalLabel && goalText !== hudCache.goal) {
+    el.goalLabel.textContent = goalText;
+    hudCache.goal = goalText;
+  }
   const goalReady = eta === 0;
-  el.goalLabel.classList.toggle("ready", goalReady);
+  el.goalLabel?.classList.toggle("ready", goalReady);
   if (goalReady && !goalReadyLastTick) {
     toast("Goal ready: next upgrade is affordable.");
   }
@@ -512,10 +564,12 @@ function renderHUD() {
 
   if (state.activeModifier) {
     const sec = Math.max(0, Math.ceil((state.modifierUntil - Date.now()) / 1000));
-    el.modifierBanner.style.display = "block";
-    el.modifierBanner.textContent = `${state.activeModifier.text} (${sec}s)`;
+    if (el.modifierBanner) {
+      el.modifierBanner.style.display = "block";
+      el.modifierBanner.textContent = `${state.activeModifier.text} (${sec}s)`;
+    }
   } else {
-    el.modifierBanner.style.display = "none";
+    if (el.modifierBanner) el.modifierBanner.style.display = "none";
   }
 
   updateMachineActivity();
@@ -530,7 +584,8 @@ function renderFactory() {
     const eta = secondsToAfford(cost);
     const affordText = state.resources.cash >= cost ? "Ready" : timeToAffordLabel(eta).replace(" to afford", "");
     const reqText = unlocked || !line.unlockReq ? "" : `Needs ${lineDefs.find((x) => x.id === line.unlockReq.line).name} Lv ${line.unlockReq.level}`;
-    return `<div class="row"><div class="row-head"><strong>${line.icon} ${line.name}</strong><span>Lv ${lv}</span></div><div class="row-meta"><span>${active ? `${fmt(line.baseRate * lv * (1 + Math.sqrt(lv) * 0.03))} w/s raw` : "Locked"}</span><span>Cost $${fmt(cost)}</span></div><div class="row-meta"><span>${reqText || "Unlocked"}</span><span>${affordText}</span></div><button class="action-btn" data-line="${line.id}" ${(!unlocked || state.resources.cash < cost) ? "disabled" : ""}>${active ? "Upgrade" : "Activate"}</button></div>`;
+    const affordable = unlocked && state.resources.cash >= cost;
+    return `<div class="row ${affordable ? "affordable" : ""}"><div class="row-head"><strong>${line.icon} ${line.name}</strong><span>Lv ${lv}</span></div><div class="row-meta"><span>${active ? `${fmt(line.baseRate * lv * (1 + Math.sqrt(lv) * 0.03))} w/s raw` : "Locked"}</span><span>Cost $${fmt(cost)}</span></div><div class="row-meta"><span>${reqText || "Unlocked"}</span><span>${affordText}</span></div><button class="action-btn" data-line="${line.id}" ${(!unlocked || !affordable) ? "disabled" : ""}>${active ? "Upgrade" : "Activate"}</button></div>`;
   }).join("");
 
   el.lineList.querySelectorAll("button[data-line]").forEach((btn) => btn.addEventListener("click", () => buyLine(btn.dataset.line)));
@@ -693,6 +748,7 @@ function updateMachineActivity() {
 }
 
 function spawnMoneyPop(amountPerSec, boosted = false) {
+  if (!el.fxLayer) return;
   const pop = document.createElement("div");
   pop.className = `money-pop ${boosted ? "boost" : ""}`;
   pop.textContent = `+$${fmt(amountPerSec)}/s`;
@@ -701,6 +757,7 @@ function spawnMoneyPop(amountPerSec, boosted = false) {
 }
 
 function spawnCompletionBurst(x, y) {
+  if (!el.fxLayer) return;
   const burst = document.createElement("div");
   burst.className = "completion-burst";
   burst.style.left = `${x}px`;
@@ -710,6 +767,7 @@ function spawnCompletionBurst(x, y) {
 }
 
 function spawnTickPop(x, y) {
+  if (!el.fxLayer) return;
   const tick = document.createElement("div");
   tick.className = "tick-pop";
   tick.textContent = "✓";
@@ -720,6 +778,7 @@ function spawnTickPop(x, y) {
 }
 
 function showRewardPopup(text) {
+  if (!el.fxLayer) return;
   const pop = document.createElement("div");
   pop.className = "reward-pop";
   pop.textContent = text;
