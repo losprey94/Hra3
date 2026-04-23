@@ -10,7 +10,7 @@ const lineDefs = [
   { id: "pack", name: "Packaging Bay", baseCost: 26000, baseRate: 0.68, icon: "📦", unlockReq: { line: "qc", level: 6 } }
 ];
 
-const lineMilestones = [5, 10, 20];
+const lineMilestones = [5, 10, 20, 50];
 
 const divisionDefs = [
   { id: "residential", name: "Residential Unit", reqCash: 900, bonus: 0.06 },
@@ -99,10 +99,10 @@ const skillDefs = [
 
 const blueprintDefs = [
   { id: "bp_frame", name: "Reinforced Frame Blueprint", desc: "Common: +4% production and +2% line synergy scaling", rarity: "Common", fragmentCost: 20, effect: () => { state.modifiers.prod += 0.04; state.modifiers.lineSynergy += 0.02; } },
-  { id: "bp_glass", name: "Precision Glass Cut Blueprint", desc: "Rare: +4% contract payouts, +8% VIP payouts", rarity: "Rare", fragmentCost: 45, effect: () => { state.modifiers.contractReward += 0.04; state.modifiers.vipContractReward += 0.08; } },
-  { id: "bp_thermal", name: "Thermal Seal Blueprint", desc: "Rare: +5% offline efficiency, reduced economic pressure", rarity: "Rare", fragmentCost: 80, effect: () => { state.modifiers.offlineEfficiency += 0.05; state.modifiers.economicPressureResist += 0.06; } },
+  { id: "bp_glass", name: "Precision Glass Cut Blueprint", desc: "Rare: +4% contract payouts, +8% VIP payouts, small double-reward chance", rarity: "Rare", fragmentCost: 45, effect: () => { state.modifiers.contractReward += 0.04; state.modifiers.vipContractReward += 0.08; state.flags.bpDoubleContractRewardChance = true; } },
+  { id: "bp_thermal", name: "Thermal Seal Blueprint", desc: "Rare: +5% offline efficiency, reduced economic pressure, first contract bonus fragments", rarity: "Rare", fragmentCost: 80, effect: () => { state.modifiers.offlineEfficiency += 0.05; state.modifiers.economicPressureResist += 0.06; state.flags.bpFirstContractFragBonus = true; } },
   { id: "bp_assembly", name: "Smart Assembly Blueprint", desc: "Epic: +2% parts/+2% rep and boosts milestone power after tier 3 contracts", rarity: "Epic", fragmentCost: 130, effect: () => { state.modifiers.partsChance += 0.02; state.modifiers.reputationGain += 0.02; if (state.contractTier >= 3) state.modifiers.lineMilestonePower += 0.16; } },
-  { id: "bp_finish", name: "Premium Finish Blueprint", desc: "Legendary: adaptive economy boost tied to completed contracts", rarity: "Legendary", fragmentCost: 190, effect: () => { const dynamicCash = Math.min(0.12, state.completedContracts * 0.003); state.modifiers.cashBonus += 0.03 + dynamicCash; state.modifiers.premiumContractReward += 0.03; } }
+  { id: "bp_finish", name: "Premium Finish Blueprint", desc: "Legendary: adaptive economy boost, first upgrade discount, rush cycle bonus", rarity: "Legendary", fragmentCost: 190, effect: () => { const dynamicCash = Math.min(0.12, state.completedContracts * 0.003); state.modifiers.cashBonus += 0.03 + dynamicCash; state.modifiers.premiumContractReward += 0.03; state.flags.bpFirstUpgradeDiscount = true; state.flags.bpRushPartsBonus = true; } }
 ];
 
 const modifierPool = [
@@ -168,7 +168,16 @@ const defaultState = () => ({
     smartTint: false,
     chainMastery: false,
     bossBreaker: false,
-    adaptiveBlueprints: false
+    adaptiveBlueprints: false,
+    bpFirstContractFragBonus: false,
+    bpRushPartsBonus: false,
+    bpFirstUpgradeDiscount: false,
+    bpDoubleContractRewardChance: false
+  },
+  runState: {
+    firstContractBonusPending: true,
+    firstUpgradeDiscountPending: true,
+    rushOrdersUsed: 0
   },
   rush: { activeUntil: 0, cooldownUntil: 0 },
   windowsMade: 0,
@@ -356,6 +365,10 @@ function validateGameState(reason = "runtime") {
   state.rush = { ...defaults.rush, ...(state.rush || {}) };
   state.rush.activeUntil = clampNonNegative(state.rush.activeUntil, defaults.rush.activeUntil, "rush.activeUntil");
   state.rush.cooldownUntil = clampNonNegative(state.rush.cooldownUntil, defaults.rush.cooldownUntil, "rush.cooldownUntil");
+  state.runState = { ...defaults.runState, ...(state.runState || {}) };
+  state.runState.firstContractBonusPending = !!state.runState.firstContractBonusPending;
+  state.runState.firstUpgradeDiscountPending = !!state.runState.firstUpgradeDiscountPending;
+  state.runState.rushOrdersUsed = Math.floor(clampNonNegative(state.runState.rushOrdersUsed, 0, "runState.rushOrdersUsed"));
 
   state.contractTier = Math.max(1, Math.floor(clampNonNegative(state.contractTier, 1, "contractTier")));
   state.contractXp = clampNonNegative(state.contractXp, 0, "contractXp");
@@ -518,7 +531,7 @@ function gameTick() {
     if (fpsFrameSkip === 1) return;
   }
   try {
-   if (now - lastStateValidationAt > 1500) {
+    if (now - lastStateValidationAt > 1500) {
       validateGameState("tick");
       lastStateValidationAt = now;
     }
@@ -735,6 +748,7 @@ function lineUpgradeCost(line) {
   const lv = state.lines[line.id].level;
   let discount = 1 - Math.min(0.18, state.modifiers.costDiscount);
   discount *= 1 - Math.min(0.2, state.metaUpgrades.costEngineering * 0.01);
+  if (state.flags.bpFirstUpgradeDiscount && state.runState.firstUpgradeDiscountPending) discount *= 0.82;
   if (state.flags.unionMomentum) discount *= 1.04;
   return Math.ceil(line.baseCost * Math.pow(1.47, lv) * discount);
 }
@@ -768,13 +782,19 @@ function buyLine(lineId) {
   const prevLv = state.lines[lineId].level;
   state.resources.cash -= cost;
   state.lines[lineId].level += 1;
+  if (state.flags.bpFirstUpgradeDiscount && state.runState.firstUpgradeDiscountPending) {
+    state.runState.firstUpgradeDiscountPending = false;
+    showRewardPopup("Blueprint bonus: first upgrade discount used");
+  }
   const nextLv = state.lines[lineId].level;
   const newlyReached = lineMilestones.find((step) => prevLv < step && nextLv >= step);
   if (newlyReached) {
     const milestoneReward = 3 + lineMilestones.indexOf(newlyReached) * 2;
     state.resources.research += milestoneReward;
     state.resources.reputation += 0.8 + lineMilestones.indexOf(newlyReached) * 0.7;
+    showRewardPopup(`${def.name} milestone Lv ${newlyReached}`);
     toast(`${def.name} milestone Lv ${newlyReached}! +${milestoneReward} research.`);
+    if (newlyReached >= 20) state.resources.parts += 2 + lineMilestones.indexOf(newlyReached);
   }
   flashMachine(lineId);
   toast(`${def.name} upgraded to Lv ${nextLv}`);
@@ -801,6 +821,11 @@ function activateRush() {
   state.rush.activeUntil = now + duration;
   const darkShiftPenalty = state.flags.darkShift ? 3000 : 0;
   state.rush.cooldownUntil = now + 32000 + cdPenalty + darkShiftPenalty;
+  state.runState.rushOrdersUsed += 1;
+  if (state.flags.bpRushPartsBonus && state.runState.rushOrdersUsed % 10 === 0) {
+    state.resources.parts += 5;
+    showRewardPopup("Blueprint cycle bonus: +5 parts");
+  }
   if (state.contract) state.contractContext.rushUsed = true;
   el.rushBtn?.classList.add("boost-fire");
   if (el.energyWave) {
@@ -846,6 +871,10 @@ function generateContractOffer() {
   };
   const fragments = Math.max(0, Math.round((template.fragments || 0) * modPack.fragmentMul) + modPack.flatFragments + (specialCfg?.fragmentBonus || 0));
   const tierRequired = specialType === "Boss" ? Math.max(2, state.contractTier) : Math.max(1, state.contractTier - 1);
+  const limited = Math.random() < 0.16 + Math.min(0.12, state.contractTier * 0.015);
+  const expiresAt = limited ? Date.now() + (35000 + Math.random() * 35000) : 0;
+  const valueScore = rewards.cash + fragments * 120 + rewards.research * 60;
+  const rarityTier = valueScore > 9000 ? "S" : valueScore > 5000 ? "A" : valueScore > 2400 ? "B" : "C";
   return {
     id: `offer_${Date.now()}_${Math.floor(Math.random() * 99999)}`,
     templateId: template.id,
@@ -859,6 +888,9 @@ function generateContractOffer() {
     fragmentReward: fragments,
     specialType,
     tierRequired,
+    limited,
+    expiresAt,
+    rarityTier,
     special: template.special || null,
     modifiers: mods.map((m) => m.text),
     requiredLine: modPack.requiredLine,
@@ -880,6 +912,8 @@ function rollSpecialContractType() {
 }
 
 function ensureContractBoard() {
+  const now = Date.now();
+  state.contractBoard = state.contractBoard.filter((c) => !c.limited || c.expiresAt > now);
   if (state.contractBoard.length >= 4) return;
   while (state.contractBoard.length < 4) {
     state.contractBoard.push(generateContractOffer());
@@ -975,6 +1009,10 @@ function claimContractReward() {
   }
   if (state.flags.continuousCasting) mult *= 0.9;
   if (state.flags.priorityPipeline) mult *= 1.06;
+  if (state.flags.bpDoubleContractRewardChance && Math.random() < 0.06) {
+    mult *= 2;
+    showRewardPopup("Blueprint proc: Double contract payout!");
+  }
   state.resources.cash += (c.rewardPack.cash || 0) * mult;
   state.resources.parts += Math.round((c.rewardPack.parts || 0) * mult);
   state.resources.research += Math.round((c.rewardPack.research || 0) * mult * (1 + state.modifiers.researchGain));
@@ -990,6 +1028,11 @@ function claimContractReward() {
   if (c.specialType === "VIP") fragGain += 1;
   if (c.specialType === "Boss") fragGain += 2;
   if (state.flags.adaptiveBlueprints && c.specialType) fragGain += 1;
+  if (state.flags.bpFirstContractFragBonus && state.runState.firstContractBonusPending) {
+    fragGain += 3;
+    state.runState.firstContractBonusPending = false;
+    showRewardPopup("Blueprint bonus: first contract fragments +3");
+  }
   if (Math.random() < state.metaUpgrades.rareContractSignal * 0.012 + state.modifiers.rareFragmentChance) fragGain += 1;
   state.blueprintFragments += fragGain;
   unlockBlueprintsFromFragments();
@@ -998,7 +1041,7 @@ function claimContractReward() {
   state.completedContracts += 1;
   gainContractXp(c);
   maybeAwardChest(c);
-  showRewardPopup(`Claimed +$${fmt((c.rewardPack.cash || 0) * mult)}`);
+  showRewardPopup(`Claimed +$${fmt((c.rewardPack.cash || 0) * mult)} • +${fragGain} fragments`);
   toast(`Reward claimed: ${c.name}${fragGain ? ` (+${fragGain} fragments)` : ""}`);
   state.contract = null;
   state.contractContext.rushUsed = false;
@@ -1111,6 +1154,7 @@ function unlockBlueprintsFromFragments() {
     state.blueprintFragments -= bp.fragmentCost;
     state.blueprints.push(bp.id);
     unlocked += 1;
+    showRewardPopup(`Blueprint unlocked: ${bp.rarity} ${bp.name}`);
     toast(`Blueprint unlocked: ${bp.name}`);
   }
   recalculateProgressionEffects();
@@ -1131,6 +1175,23 @@ function recalculateProgressionEffects() {
   state.modifiers.lineMilestonePower += (state.metaUpgrades.strategyProd || 0) * 0.03;
   state.modifiers.vipContractReward += (state.metaUpgrades.strategyContracts || 0) * 0.015;
   state.modifiers.economicPressureResist += (state.metaUpgrades.strategyBlueprints || 0) * 0.01;
+  applyLineMilestoneBonuses();
+}
+
+function applyLineMilestoneBonuses() {
+  const frameLv = state.lines.cutter.level;
+  const forgeLv = state.lines.furnace.level;
+  const assemblyLv = state.lines.assembler.level;
+  const qcLv = state.lines.qc.level;
+
+  if (frameLv >= 10) state.modifiers.lineSynergy += 0.05;
+  if (forgeLv >= 10) state.modifiers.rareFragmentChance += 0.025;
+  if (assemblyLv >= 20) state.modifiers.contractDurationMul -= 0.06;
+  if (qcLv >= 20) state.modifiers.contractFailurePenaltyMul -= 0.08;
+  if (lineDefs.every((l) => state.lines[l.id].level >= 50)) {
+    state.modifiers.prod += 0.15;
+    state.modifiers.contractReward += 0.08;
+  }
 }
 
 function skillXpToNext(level) {
@@ -1524,8 +1585,10 @@ function renderAll() {
 function renderRewardHub() {
   if (!el.openChestBtn || !el.chestCountLabel || !el.activeBoostList || !el.milestoneList || !el.claimList) return;
   const totalChests = chestRarities.reduce((sum, r) => sum + (state.chests[r] || 0), 0);
-  el.chestCountLabel.textContent = totalChests ? `${totalChests} chest${totalChests > 1 ? "s" : ""}` : "No chests";
+  const readyClaims = state.pendingClaims.length + milestoneDefs.filter((m) => !state.claimedMilestones.includes(m.id) && m.progress() >= 1).length;
+  el.chestCountLabel.textContent = totalChests ? `${totalChests} chest${totalChests > 1 ? "s" : ""}${readyClaims ? ` • ${readyClaims} ready` : ""}` : (readyClaims ? `${readyClaims} rewards ready` : "No chests");
   el.openChestBtn.disabled = totalChests === 0;
+  el.openChestBtn.classList.toggle("ready-pulse", totalChests > 0);
 
   const now = Date.now();
   const boosts = (state.activeBoosts || [])
@@ -1546,15 +1609,16 @@ function renderRewardHub() {
   });
   el.milestoneList.innerHTML = milestones.map((m) => {
     const rewardText = Object.entries(m.reward).map(([k, v]) => `${k}:${typeof v === "number" ? fmt(v) : v}`).join(" • ");
-    return `<div class="row ${m.complete && !m.claimed ? "affordable" : ""}">
+    const near = !m.complete && m.p >= 0.8;
+    return `<div class="row ${m.complete && !m.claimed ? "affordable ready-pulse" : ""} ${near ? "near-ready" : ""}">
       <div class="row-head"><strong>${m.tier}: ${m.label}</strong><span>${Math.floor(m.p * 100)}%</span></div>
       <div class="mod-progress"><span style="width:${Math.floor(m.p * 100)}%"></span></div>
       <div class="row-meta"><span>${rewardText}</span><span>${m.claimed ? "Claimed" : (m.complete ? "Ready" : "In progress")}</span></div>
-      ${m.complete && !m.claimed ? `<button class="action-btn" data-claim-milestone="${m.id}">Claim</button>` : ""}
+      ${m.complete && !m.claimed ? `<button class="action-btn ready-pulse" data-claim-milestone="${m.id}">Claim</button>` : ""}
     </div>`;
   }).join("");
 
-  el.claimList.innerHTML = state.pendingClaims.map((c) => `<div class="row affordable"><div class="row-head"><strong>${c.title}</strong><span>Claimable</span></div><div class="row-meta"><span>${c.desc}</span><span></span></div><button class="action-btn claim-btn" data-claim-pending="${c.id}">Claim Reward</button></div>`).join("");
+  el.claimList.innerHTML = state.pendingClaims.map((c) => `<div class="row affordable ready-pulse"><div class="row-head"><strong>${c.title}</strong><span>Claimable</span></div><div class="row-meta"><span>${c.desc}</span><span></span></div><button class="action-btn claim-btn ready-pulse" data-claim-pending="${c.id}">Claim Reward</button></div>`).join("");
   el.milestoneList.querySelectorAll("[data-claim-milestone]").forEach((btn) => btn.addEventListener("click", () => claimMilestone(btn.dataset.claimMilestone)));
   el.claimList.querySelectorAll("[data-claim-pending]").forEach((btn) => btn.addEventListener("click", () => claimPending(btn.dataset.claimPending)));
 }
@@ -1739,14 +1803,17 @@ function renderContracts() {
     const special = c.modifiers?.length ? c.modifiers.join(" • ") : "No modifiers";
     const typeClass = `type-${c.type.toLowerCase()}`;
     const specialBadge = c.specialType ? `<span>${c.specialType}</span>` : `<span>${c.type}</span>`;
+    const limitedLeft = c.limited ? Math.max(0, Math.ceil((c.expiresAt - Date.now()) / 1000)) : null;
+    const nearExpiry = c.limited && limitedLeft <= 15;
     return `<div class="row contract-card state-available ${typeClass} ${best?.id === c.id ? "best-option" : ""}">
       <div class="row-head"><strong>${c.name}</strong>${specialBadge}</div>
+      <div class="row-meta"><span>Value Tier ${c.rarityTier || "C"}</span><span>${c.limited ? `<span class="${nearExpiry ? "ready-pulse" : ""}">Limited ${limitedLeft}s</span>` : "Standard window"}</span></div>
       <div class="row-meta"><span>Need ${c.windows} windows in ${c.duration}s</span><span>Rep ${c.minRep.toFixed(0)}</span></div>
       <div class="row-meta"><span>Reward: $${fmt(c.rewards.cash)} + extras</span><span>Fragments +${c.fragmentReward || 0}</span></div>
       <div class="row-meta"><span>${special}</span><span>${statusText} • Fail -${c.failRep} rep</span></div>
       ${c.requiredLine ? `<div class="row-meta"><span>Requires ${lineDefs.find((l) => l.id === c.requiredLine.id)?.name || "Line"} Lv ${c.requiredLine.level}</span><span></span></div>` : ""}
       <div class="row-meta"><span>Tier ${c.tierRequired || 1} contract</span><span>${c.type}</span></div>
-      ${(!lock && !tierLock && !lineLock && !state.contract) ? `<button class="action-btn" data-contract="${c.id}">Start</button>` : ""}
+      ${(!lock && !tierLock && !lineLock && !state.contract) ? `<button class="action-btn ${nearExpiry ? "ready-pulse" : ""}" data-contract="${c.id}">Start</button>` : ""}
     </div>`;
   }).join("");
 
@@ -1772,7 +1839,7 @@ function renderContracts() {
 function renderSkills() {
   const grouped = [...new Set(skillDefs.map((s) => s.branch))];
   const xpNeed = skillXpToNext(state.skillLevel);
-  const header = `<div class="row"><div class="row-head"><strong>Skill Points</strong><span>${state.skillPoints}</span></div><div class="row-meta"><span>Level ${state.skillLevel}</span><span>${fmt(state.skillXp)} / ${xpNeed} XP</span></div><button class="action-btn" id="respecSkillsBtn">Respec Tree (2🏅 + 1% run cash)</button></div>`;
+  const header = `<div class="row"><div class="row-head"><strong>Skill Points</strong><span>${state.skillPoints}</span></div><div class="row-meta"><span>Level ${state.skillLevel}</span><span>${fmt(state.skillXp)} / ${xpNeed} XP</span></div><div class="row-meta"><span>Build Identity</span><span>${getBuildIdentity()}</span></div><button class="action-btn" id="respecSkillsBtn">Respec Tree (2🏅 + 1% run cash)</button></div>`;
   const body = grouped.map((b) => {
     const branchSkills = skillDefs.filter((s) => s.branch === b);
     const owned = branchSkills.filter((s) => state.skills.includes(s.id)).length;
@@ -1789,8 +1856,30 @@ function renderSkills() {
   document.getElementById("respecSkillsBtn")?.addEventListener("click", respecSkills);
 }
 
+function getBuildIdentity() {
+  const branchSpend = {};
+  state.skills.forEach((id) => {
+    const node = skillDefs.find((s) => s.id === id);
+    if (!node) return;
+    branchSpend[node.branch] = (branchSpend[node.branch] || 0) + (node.cost || 0);
+  });
+  const top = Object.entries(branchSpend).sort((a, b) => b[1] - a[1])[0];
+  if (!top) return "Balanced Starter";
+  const map = {
+    Production: "Production Build",
+    Contracts: "Contract Specialist",
+    Automation: "Offline Automation",
+    Economy: "Profit Operator",
+    Quality: "Reliability Focus",
+    Workforce: "Rush Commander"
+  };
+  return map[top[0]] || `${top[0]} Focus`;
+}
+
 function renderBlueprints() {
-  const fragmentHeader = `<div class="row"><div class="row-head"><strong>Blueprint Fragments</strong><span>${fmt(state.blueprintFragments)}</span></div><div class="row-meta"><span>Earned mainly from contracts. Unlocks trigger automatically.</span><span>${state.blueprints.length}/${blueprintDefs.length} unlocked</span></div></div>`;
+  const nextBp = blueprintDefs.find((bp) => !state.blueprints.includes(bp.id));
+  const progressPct = nextBp ? Math.min(100, Math.floor((state.blueprintFragments / nextBp.fragmentCost) * 100)) : 100;
+  const fragmentHeader = `<div class="row"><div class="row-head"><strong>Blueprint Fragments</strong><span>${fmt(state.blueprintFragments)}</span></div><div class="row-meta"><span>Earned mainly from contracts. Unlocks trigger automatically.</span><span>${state.blueprints.length}/${blueprintDefs.length} unlocked</span></div><div class="mod-progress"><span style="width:${progressPct}%"></span></div><div class="row-meta"><span>${nextBp ? `Next: ${nextBp.name}` : "All blueprints unlocked"}</span><span>${progressPct}%</span></div></div>`;
   const cards = blueprintDefs.map((bp) => {
     const unlocked = state.blueprints.includes(bp.id);
     const remain = Math.max(0, bp.fragmentCost - state.blueprintFragments);

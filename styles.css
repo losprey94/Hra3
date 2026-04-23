@@ -1542,3 +1542,16 @@ body::before {
   background: linear-gradient(170deg, rgba(33, 69, 116, 0.9), rgba(21, 47, 85, 0.9));
   box-shadow: 0 0 0 1px rgba(115, 200, 255, 0.32), 0 0 14px rgba(75, 175, 255, 0.22);
 }
+
+.ready-pulse {
+  animation: readyPulse 1.35s ease-in-out infinite;
+}
+
+@keyframes readyPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(106, 211, 255, 0.06); }
+  50% { box-shadow: 0 0 0 2px rgba(106, 211, 255, 0.22), 0 0 16px rgba(106, 211, 255, 0.22); }
+}
+
+.near-ready {
+  border-color: rgba(255, 205, 116, 0.62);
+}
