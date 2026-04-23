@@ -1396,7 +1396,25 @@ body::before {
 
 .res-pill .v {
   color: #dff4ff;
-  font-size: 1.02rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.res-pill .rate {
+  margin-top: 2px;
+  font-size: 0.56rem;
+  color: #7f9bb9;
+  white-space: nowrap;
+}
+
+.res-pill .rate.rate-pos {
+  color: #83e6ff;
+}
+
+.res-pill .res-ico {
+  margin-right: 4px;
+  color: #9defff;
   font-weight: 700;
 }
 
@@ -1614,6 +1632,12 @@ body::before {
   border-color: rgba(111, 197, 255, 0.58);
   background: linear-gradient(170deg, rgba(33, 69, 116, 0.9), rgba(21, 47, 85, 0.9));
   box-shadow: 0 0 0 1px rgba(115, 200, 255, 0.32), 0 0 14px rgba(75, 175, 255, 0.22);
+}
+
+.action-btn:disabled,
+.primary-btn:disabled {
+  opacity: 0.62;
+  filter: saturate(0.75);
 }
 
 @media (min-width: 700px) {

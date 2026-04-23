@@ -1674,13 +1674,34 @@ function applyRewardPayload(reward = {}) {
 
 function renderHUD() {
   const labels = {
-    cash: "💵 Cash",
-    research: "🧪 Research",
-    reputation: "⭐ Reputation",
-    parts: "⚙️ Parts",
-    tokens: "🏅 Tokens"
+    cash: { icon: "◈", name: "Cash" },
+    research: { icon: "▣", name: "Research" },
+    reputation: { icon: "✦", name: "Reputation" },
+    parts: { icon: "⬢", name: "Parts" },
+    tokens: { icon: "◉", name: "Tokens" }
   };
-  const resourceMarkup = RESOURCES.map((k) => `<div class="res-pill"><div class="k">${labels[k]}</div><div class="v">${k === "cash" ? "$" : ""}${fmt(state.resources[k] || 0)}</div></div>`).join("");
+  const getRateInfo = (key) => {
+    if (key === "cash") {
+      const v = Math.max(0, safeNumber(calcWindowsPerSec() * cashPerWindow(), "hud:cashRate"));
+      return { text: `+${fmt(v)}/s`, active: v > 0.001 };
+    }
+    if (key === "research") return { text: "from contracts", active: false };
+    if (key === "reputation") {
+      const v = Math.max(0, safeNumber(calcWindowsPerSec() * 0.0009 * (1 + state.modifiers.reputationGain), "hud:repRate"));
+      return { text: `+${fmt(v)}/s`, active: v > 0.0001 };
+    }
+    if (key === "parts") {
+      const perSec = Math.max(0, safeNumber(0.03 + state.modifiers.partsChance, "hud:partsRate"));
+      const perMin = perSec * 60;
+      return { text: perMin > 0.02 ? `+${fmt(perMin)}/min` : "from contracts", active: perMin > 0.02 };
+    }
+    return { text: "prestige only", active: false };
+  };
+  const resourceMarkup = RESOURCES.map((k) => {
+    const display = `${k === "cash" ? "$" : ""}${fmt(state.resources[k] || 0)}`;
+    const rate = getRateInfo(k);
+    return `<div class="res-pill"><div class="k"><span class="res-ico">${labels[k].icon}</span>${labels[k].name}</div><div class="v">${display}</div><div class="rate ${rate.active ? "rate-pos" : ""}">${rate.text}</div></div>`;
+  }).join("");
   if (resourceMarkup !== hudCache.resources && el.resourceStrip) {
     el.resourceStrip.innerHTML = resourceMarkup;
     hudCache.resources = resourceMarkup;
