@@ -751,17 +751,17 @@ function estimateRevenueForTargetTokens(targetTokens) {
 
 function getModernizationUpgradeDefs() {
   return [
-    { key: "startCash", category: "Early Game Boost", name: "Kickstart Treasury", desc: "+$55 starting cash per level", baseCost: 1, costMul: 1.45, max: 15 },
-    { key: "startupMomentum", category: "Early Game Boost", name: "Startup Momentum", desc: "+1.8% early-run production per level", baseCost: 1, costMul: 1.6, max: 12 },
-    { key: "lineCalibration", category: "Production Efficiency", name: "Line Calibration", desc: "+1.5% production speed per level", baseCost: 2, costMul: 1.58, max: 20 },
-    { key: "costEngineering", category: "Production Efficiency", name: "Cost Engineering", desc: "-1% line upgrade cost per level", baseCost: 2, costMul: 1.65, max: 20 },
-    { key: "contractNegotiation", category: "Contracts", name: "Negotiation Office", desc: "+3% contract reward multiplier per level", baseCost: 2, costMul: 1.62, max: 15 },
-    { key: "rareContractSignal", category: "Contracts", name: "Rare Contract Signal", desc: "Small chance for +1 extra fragment on claims", baseCost: 3, costMul: 1.7, max: 12 },
-    { key: "fragmentMagnet", category: "Blueprint System", name: "Fragment Magnet", desc: "+5% fragment gains per level", baseCost: 2, costMul: 1.63, max: 18 },
-    { key: "fragmentRefining", category: "Blueprint System", name: "Fragment Refinery", desc: "+3% fragment gains per level", baseCost: 3, costMul: 1.72, max: 15 },
-    { key: "offlineLogistics", category: "Offline Progress", name: "Offline Logistics", desc: "+10% offline earnings per level", baseCost: 2, costMul: 1.58, max: 15 },
-    { key: "offlineCap", category: "Offline Progress", name: "Offline Capacity", desc: "+5 min offline cap per level", baseCost: 1, costMul: 1.52, max: 18 },
-    { key: "autoClaim", category: "Quality of Life", name: "Auto Claim Contracts", desc: "Automatically claims completed contracts", baseCost: 8, costMul: 2.2, max: 1 }
+    { key: "startCash", category: "Early Game Boost", uiCategory: "Economy", icon: "💰", name: "Kickstart Treasury", desc: "+$55 starting cash per level", baseCost: 1, costMul: 1.45, max: 15, effect: (lv) => `$${fmt(lv * 55)}` },
+    { key: "startupMomentum", category: "Early Game Boost", uiCategory: "Production", icon: "⚡", name: "Startup Momentum", desc: "+1.8% early-run production per level", baseCost: 1, costMul: 1.6, max: 12, effect: (lv) => `+${(lv * 1.8).toFixed(1)}% early boost` },
+    { key: "lineCalibration", category: "Production Efficiency", uiCategory: "Production", icon: "🏭", name: "Line Calibration", desc: "+1.5% production speed per level", baseCost: 2, costMul: 1.58, max: 20, effect: (lv) => `+${(lv * 1.5).toFixed(1)}% speed` },
+    { key: "costEngineering", category: "Production Efficiency", uiCategory: "Economy", icon: "🧮", name: "Cost Engineering", desc: "-1% line upgrade cost per level", baseCost: 2, costMul: 1.65, max: 20, effect: (lv) => `-${Math.min(20, lv)}% line cost` },
+    { key: "contractNegotiation", category: "Contracts", uiCategory: "Contracts", icon: "📜", name: "Negotiation Office", desc: "+3% contract reward multiplier per level", baseCost: 2, costMul: 1.62, max: 15, effect: (lv) => `+${(lv * 3).toFixed(0)}% rewards` },
+    { key: "rareContractSignal", category: "Contracts", uiCategory: "Contracts", icon: "🎯", name: "Rare Contract Signal", desc: "Small chance for +1 extra fragment on claims", baseCost: 3, costMul: 1.7, max: 12, effect: (lv) => `+${(lv * 1.2).toFixed(1)}% bonus frag chance` },
+    { key: "fragmentMagnet", category: "Blueprint System", uiCategory: "Blueprints", icon: "🧩", name: "Fragment Magnet", desc: "+5% fragment gains per level", baseCost: 2, costMul: 1.63, max: 18, effect: (lv) => `+${(lv * 5).toFixed(0)}% fragments` },
+    { key: "fragmentRefining", category: "Blueprint System", uiCategory: "Blueprints", icon: "🔬", name: "Fragment Refinery", desc: "+3% fragment gains per level", baseCost: 3, costMul: 1.72, max: 15, effect: (lv) => `+${(lv * 3).toFixed(0)}% fragments` },
+    { key: "offlineLogistics", category: "Offline Progress", uiCategory: "Offline", icon: "🌙", name: "Offline Logistics", desc: "+10% offline earnings per level", baseCost: 2, costMul: 1.58, max: 15, effect: (lv) => `+${(lv * 10).toFixed(0)}% offline` },
+    { key: "offlineCap", category: "Offline Progress", uiCategory: "Offline", icon: "⏱️", name: "Offline Capacity", desc: "+5 min offline cap per level", baseCost: 1, costMul: 1.52, max: 18, effect: (lv) => `+${lv * 5} min cap` },
+    { key: "autoClaim", category: "Quality of Life", uiCategory: "Contracts", icon: "🤖", name: "Auto Claim Contracts", desc: "Automatically claims completed contracts", baseCost: 8, costMul: 2.2, max: 1, effect: (lv) => (lv > 0 ? "Enabled" : "Disabled") }
   ];
 }
 
@@ -777,10 +777,12 @@ function buyModernizationUpgrade(key) {
   if (lvl >= def.max) return;
   const cost = modernizationUpgradeCost(def);
   if (state.resources.tokens < cost) return;
+  const card = document.querySelector(`[data-upgrade-card="${key}"]`);
+  if (card) card.classList.add("invest-pop");
   state.resources.tokens -= cost;
   state.metaUpgrades[key] = lvl + 1;
   toast(`Modernization upgraded: ${def.name}`);
-  openModernizationHub();
+  setTimeout(() => openModernizationHub(), 120);
 }
 
 function tryModernize() {
@@ -858,7 +860,12 @@ function openModernizationHub() {
   activeModal = "modernizationHub";
   setDrawerOpen(false);
   const analysis = calcModernizationAnalysis();
-  const byCategory = getModernizationUpgradeDefs().reduce((acc, u) => {
+  const defs = getModernizationUpgradeDefs();
+  const currentFilter = state.modernizationFilter || "All";
+  const tabs = ["All", "Production", "Contracts", "Blueprints", "Economy", "Offline"];
+  const tabHtml = tabs.map((tab) => `<button class="mod-tab ${tab === currentFilter ? "active" : ""}" data-mod-filter="${tab}">${tab}</button>`).join("");
+  const filtered = defs.filter((u) => currentFilter === "All" || u.uiCategory === currentFilter);
+  const byCategory = filtered.reduce((acc, u) => {
     if (!acc[u.category]) acc[u.category] = [];
     acc[u.category].push(u);
     return acc;
@@ -868,20 +875,37 @@ function openModernizationHub() {
       const lvl = state.metaUpgrades[u.key] || 0;
       const maxed = lvl >= u.max;
       const cost = modernizationUpgradeCost(u);
-      const disabled = maxed || state.resources.tokens < cost ? "disabled" : "";
-      const stateLabel = maxed ? "Maxed" : `Lv ${lvl}/${u.max}`;
-      return `<div class="row"><div class="row-head"><strong>${u.name}</strong><span>${stateLabel}</span></div><div class="row-meta"><span>${u.desc}</span><span>${maxed ? "MAX" : `Cost ${cost} 🏅`}</span></div>${maxed ? "" : `<button class="action-btn" data-meta="${u.key}" ${disabled}>Invest</button>`}</div>`;
+      const affordable = state.resources.tokens >= cost;
+      const disabled = maxed || !affordable ? "disabled" : "";
+      const missing = Math.max(0, cost - state.resources.tokens);
+      const progressPct = Math.round((lvl / u.max) * 100);
+      const currentEffect = u.effect ? u.effect(lvl) : `Lv ${lvl}`;
+      const nextEffect = u.effect ? u.effect(Math.min(u.max, lvl + 1)) : `Lv ${lvl + 1}`;
+      return `<div class="mod-card ${affordable && !maxed ? "affordable" : ""}" data-upgrade-card="${u.key}">
+        <div class="mod-card-head"><span class="mod-icon">${u.icon || "⚙️"}</span><div><strong>${u.name}</strong><small>${u.category}</small></div><span>Lv ${lvl}/${u.max}</span></div>
+        <p>${u.desc}</p>
+        <div class="row-meta"><span>Current: ${currentEffect}</span><span>${maxed ? "MAXED" : `Next: ${nextEffect}`}</span></div>
+        <div class="mod-progress"><span style="width:${progressPct}%"></span></div>
+        <div class="row-meta"><span>${maxed ? "No further cost" : `Cost ${cost} 🏅`}</span><span>${maxed ? "Completed" : (affordable ? "Affordable now" : `Need ${missing} more`)}</span></div>
+        ${maxed ? "" : `<button class="action-btn" data-meta="${u.key}" ${disabled}>Invest</button>`}
+      </div>`;
     }).join("");
-    return `<h4>${category}</h4><div class="list">${rows}</div>`;
+    return `<div class="mod-group"><h4>${category}</h4><div class="list">${rows}</div></div>`;
   }).join("");
 
   const efficiencyLabel = analysis.shortPenalty < 0.95 ? "Too Early" : (analysis.reward >= 4 ? "Efficient" : "Building");
   const nextHint = analysis.extraRevenue == null ? "Long push needed for next token." : `Need about +$${fmt(analysis.extraRevenue)} more revenue for ${analysis.nextTarget} tokens.`;
+  const investedTotal = defs.reduce((sum, u) => sum + (state.metaUpgrades[u.key] || 0), 0);
 
   openModal(`
-    <h3>Modernization Hub</h3>
-    <p>Tokens: <strong id="modTokens">${fmt(state.resources.tokens)}</strong> • Advanced Tech Points: <strong>${fmt(state.advancedTech.points)}</strong> (Tier 2 locked)</p>
-    <div class="row">
+    <div class="modernization-shell">
+    <div class="modernization-header">
+      <h3>Factory Modernization</h3>
+      <p>Permanent upgrades that shape every future run.</p>
+      <div class="modernization-stats"><span>🏅 Tokens <strong id="modTokens">${fmt(state.resources.tokens)}</strong></span><span>Invested <strong>${investedTotal}</strong></span><span>Tier 2 ATP <strong>${fmt(state.advancedTech.points)}</strong></span></div>
+    </div>
+    <div class="mod-tabs">${tabHtml}</div>
+    <div class="row mod-preview">
       <div class="row-head"><strong>Reset Preview</strong><span id="modEfficiency">${efficiencyLabel}</span></div>
       <div class="row-meta"><span>If you reset now:</span><span><strong id="modReward">${analysis.reward}</strong> tokens</span></div>
       <div class="row-meta"><span>Cash requirement</span><span>$<span id="modCost">${fmt(analysis.cost)}</span></span></div>
@@ -892,8 +916,15 @@ function openModernizationHub() {
     ${categoryHtml}
     <button id="modernizeRun" class="action-btn" ${analysis.ready ? "" : "disabled"}>Modernize Run</button>
     <button id="closeModernizeHub" class="action-btn">Close</button>
+    </div>
   `);
 
+  document.querySelectorAll("[data-mod-filter]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.modernizationFilter = btn.dataset.modFilter;
+      openModernizationHub();
+    });
+  });
   document.querySelectorAll("[data-meta]").forEach((btn) => {
     btn.addEventListener("click", () => buyModernizationUpgrade(btn.dataset.meta));
   });

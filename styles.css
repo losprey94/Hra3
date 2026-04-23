@@ -631,6 +631,135 @@ h1 {
   font-size: 0.84rem;
 }
 
+.modernization-shell {
+  display: grid;
+  gap: 10px;
+}
+
+.modernization-header {
+  border: 1px solid rgba(107, 169, 242, 0.48);
+  border-radius: 12px;
+  padding: 10px;
+  background: linear-gradient(160deg, rgba(34, 54, 82, 0.94), rgba(18, 30, 49, 0.94));
+  box-shadow: 0 10px 24px rgba(8, 16, 30, 0.35), inset 0 1px 0 rgba(190, 224, 255, 0.09);
+}
+
+.modernization-header h3 {
+  margin: 0;
+}
+
+.modernization-header p {
+  margin: 3px 0 8px;
+  font-size: 0.76rem;
+  color: #aecdff;
+}
+
+.modernization-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.modernization-stats span {
+  font-size: 0.72rem;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(23, 39, 62, 0.78);
+  border: 1px solid rgba(89, 126, 176, 0.55);
+}
+
+.mod-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.mod-tab {
+  border: 1px solid #4e6c95;
+  color: #d3e6ff;
+  background: #1d2f4c;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.mod-tab.active {
+  background: linear-gradient(180deg, #3f6ea7, #305782);
+  border-color: #88b9ff;
+  color: #f2f9ff;
+}
+
+.mod-preview {
+  border-color: #5f7da9;
+  background: rgba(25, 39, 60, 0.86);
+}
+
+.mod-group h4 {
+  margin: 8px 0 6px;
+}
+
+.mod-card {
+  border: 1px solid #476389;
+  border-radius: 12px;
+  padding: 9px;
+  background: linear-gradient(180deg, rgba(30, 45, 70, 0.95), rgba(22, 36, 58, 0.95));
+  box-shadow: 0 6px 14px rgba(6, 12, 22, 0.28);
+}
+
+.mod-card.affordable {
+  border-color: #72d8a6;
+  box-shadow: 0 0 0 1px rgba(114, 216, 166, 0.32), 0 8px 16px rgba(10, 22, 27, 0.34);
+}
+
+.mod-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.mod-card-head small {
+  display: block;
+  color: #9eb4d5;
+  font-size: 0.66rem;
+}
+
+.mod-card p {
+  margin: 6px 0;
+  font-size: 0.72rem;
+  color: #d0def3;
+}
+
+.mod-icon {
+  font-size: 1rem;
+}
+
+.mod-progress {
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(12, 20, 33, 0.8);
+  border: 1px solid rgba(82, 114, 157, 0.5);
+  overflow: hidden;
+}
+
+.mod-progress span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #76d5ff, #76ffc4);
+}
+
+.invest-pop {
+  animation: investPulse 220ms ease-out;
+}
+
+@keyframes investPulse {
+  0% { transform: scale(1); }
+  55% { transform: scale(1.02); box-shadow: 0 0 0 3px rgba(123, 255, 206, 0.18); }
+  100% { transform: scale(1); }
+}
+
 body.modernize-flash::after {
   content: "";
   position: fixed;
@@ -1028,10 +1157,18 @@ body.drawer-open {
 .modal {
   width: 100%;
   max-width: 380px;
+  max-height: 90dvh;
+  overflow: auto;
   border-radius: 12px;
   border: 1px solid #45658d;
   background: #1b2a41;
   padding: 12px;
+  animation: modalPop 180ms ease-out;
+}
+
+@keyframes modalPop {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .settings-head {
