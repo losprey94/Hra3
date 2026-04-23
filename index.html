@@ -15,6 +15,10 @@
 
     <main class="screen-container">
       <section id="screen-home" class="screen active">
+        <div class="screen-head compact">
+          <h2 class="screen-title">Factory Floor</h2>
+          <p class="screen-sub">Live production and boost controls</p>
+        </div>
         <div class="info-strip">
           <span>Income <strong id="rpsLabel">$0</strong>/s</span>
           <span>Output <strong id="wpsLabel">0</strong> w/s</span>
@@ -39,38 +43,52 @@
       </section>
 
       <section id="screen-factory" class="screen">
+        <div class="screen-head">
+          <h2 class="screen-title">Factory Management</h2>
+          <p class="screen-sub">Upgrade lines and expand divisions</p>
+        </div>
         <div class="card section-card">
-          <h2>Production Lines</h2>
+          <h3>Production Lines</h3>
           <div id="lineList" class="list"></div>
         </div>
 
         <div class="card section-card">
-          <h2>Divisions</h2>
+          <h3>Divisions</h3>
           <div id="divisionList" class="list"></div>
         </div>
       </section>
 
       <section id="screen-skills" class="screen">
+        <div class="screen-head">
+          <h2 class="screen-title">Skill Tree</h2>
+          <p class="screen-sub">Define your factory build path</p>
+        </div>
         <div class="card section-card">
-          <h2>Skill Tree</h2>
           <div id="skillBranches" class="skill-branches"></div>
         </div>
       </section>
       
       <section id="screen-blueprints" class="screen">
+        <div class="screen-head">
+          <h2 class="screen-title">Blueprint Lab</h2>
+          <p class="screen-sub">Long-term tech unlock progression</p>
+        </div>
         <div class="card section-card">
-          <h2>Blueprints</h2>
           <div id="blueprintList" class="list"></div>
         </div>
       </section>
 
       <section id="screen-contracts" class="screen">
+        <div class="screen-head">
+          <h2 class="screen-title">Contracts Board</h2>
+          <p class="screen-sub">Run timed jobs for burst rewards</p>
+        </div>
         <div class="card section-card">
-          <h2>Active Contract</h2>
+          <h3>Active Contract</h3>
           <div id="activeContract" class="list"></div>
         </div>
         <div class="card section-card">
-          <h2>Available Contracts</h2>
+          <h3>Available Contracts</h3>
           <div id="contractList" class="list"></div>
         </div>
       </section>

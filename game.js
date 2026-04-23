@@ -1450,8 +1450,9 @@ function toast(msg) {
 }
 
 function openModal(html) {
-  el.modalLayer.innerHTML = `<div class="modal">${html}</div>`;
+  el.modalLayer.innerHTML = `<div class="modal"><button class="modal-close" id="modalCloseBtn" aria-label="Close panel">✕</button>${html}</div>`;
   el.modalLayer.classList.remove("hidden");
+  document.getElementById("modalCloseBtn")?.addEventListener("click", closeModal);
 }
 
 function closeModal() {
