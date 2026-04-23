@@ -19,14 +19,26 @@
           <h2 class="screen-title">Factory Floor</h2>
           <p class="screen-sub">Live production and boost controls</p>
         </div>
-        <div class="info-strip">
-          <span>Income <strong id="rpsLabel">$0</strong>/s</span>
-          <span>Output <strong id="wpsLabel">0</strong> w/s</span>
-          <span>Cash <strong id="cashFocus">$0</strong></span>
-          <span id="goalLabel">Goal: Upgrade the Cutter</span>
+        <div class="mission-panel">
+          <div class="mission-head">
+            <span class="mission-tag">MISSION TRACKER</span>
+            <span class="mission-state">ACTIVE</span>
+          </div>
+          <p id="goalLabel" class="mission-goal">Goal: Upgrade the Cutter</p>
+          <div class="mission-metrics">
+            <span>Income <strong id="rpsLabel">$0</strong>/s</span>
+            <span>Output <strong id="wpsLabel">0</strong> w/s</span>
+            <span>Cash <strong id="cashFocus">$0</strong></span>
+          </div>
         </div>
 
         <div class="factory-view" id="factoryView">
+          <svg class="factory-links" viewBox="0 0 400 210" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M78 157 L102 157 L102 90 L182 90" />
+            <path d="M178 165 L206 165 L206 165 L274 165" />
+            <path d="M274 90 L350 90" />
+            <path d="M274 165 L350 165" />
+          </svg>
           <div class="factory-bg-layer"></div>
           <div class="energy-wave" id="energyWave"></div>
           <div class="factory-grid" id="factoryGrid"></div>
@@ -37,7 +49,7 @@
         </div>
 
         <div class="action-dock">
-          <button id="rushBtn" class="primary-btn">Boost Production</button>
+          <button id="rushBtn" class="primary-btn">⚡ Boost Production</button>
           <p id="rushStatus" class="subtext">Tap for a temporary production boost.</p>
         </div>
         <div class="card section-card reward-hub">
@@ -106,11 +118,11 @@
     </main>
 
     <nav class="bottom-nav">
-      <button data-tab="home" class="tab active">Home</button>
-      <button data-tab="factory" class="tab">Factory</button>
-      <button data-tab="skills" class="tab">Skills</button>
-      <button data-tab="blueprints" class="tab">Blueprints</button>
-      <button data-tab="contracts" class="tab">Contracts</button>
+      <button data-tab="home" class="tab active"><span class="tab-ico">⌂</span><span>Home</span></button>
+      <button data-tab="factory" class="tab"><span class="tab-ico">🏭</span><span>Factory</span></button>
+      <button data-tab="skills" class="tab"><span class="tab-ico">🧠</span><span>Skills</span></button>
+      <button data-tab="blueprints" class="tab"><span class="tab-ico">🧩</span><span>Blueprints</span></button>
+      <button data-tab="contracts" class="tab"><span class="tab-ico">📜</span><span>Contracts</span></button>
     </nav>
 
     <div id="drawerOverlay" class="drawer-overlay"></div>

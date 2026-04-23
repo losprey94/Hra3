@@ -219,6 +219,8 @@ let fpsFrameSkip = 0;
 let drawerOpen = false;
 let uiRefreshTimer = 0;
 let lastGameLoopErrorAt = 0;
+let lastStateValidationAt = 0;
+const repairWarningState = { lastAt: 0, count: 0 };
 
 const el = {
   resourceStrip: document.getElementById("resourceStrip"),
@@ -254,6 +256,7 @@ const el = {
   modifierBanner: document.getElementById("modifierBanner")
 };
 
+validateGameState("startup");
 validateConfig();
 bootstrapFactoryVisual();
 bindEvents();
@@ -279,6 +282,159 @@ function safeDiv(numerator, denominator, context = "divide") {
     return 0;
   }
   return num / den;
+}
+
+function warnRepair(issue, details = null) {
+  const now = Date.now();
+  if (now - repairWarningState.lastAt < 2000 && repairWarningState.count > 8) return;
+  if (now - repairWarningState.lastAt >= 2000) repairWarningState.count = 0;
+  repairWarningState.lastAt = now;
+  repairWarningState.count += 1;
+  console.warn(`[state-repair] ${issue}`, details || "");
+}
+
+function finiteOrDefault(value, fallback, label) {
+  const n = Number(value);
+  if (Number.isFinite(n)) return n;
+  warnRepair(`Invalid number repaired: ${label}`, { value, fallback });
+  return fallback;
+}
+
+function clampNonNegative(value, fallback, label) {
+  const n = finiteOrDefault(value, fallback, label);
+  if (n < 0) {
+    warnRepair(`Negative value clamped: ${label}`, { value: n });
+    return 0;
+  }
+  return n;
+}
+
+function validateGameState(reason = "runtime") {
+  const defaults = defaultState();
+  if (!state || typeof state !== "object") {
+    warnRepair(`State object missing (${reason}), restoring defaults.`);
+    state = defaults;
+    return;
+  }
+
+  state.resources = { ...defaults.resources, ...(state.resources || {}) };
+  Object.keys(defaults.resources).forEach((key) => {
+    state.resources[key] = clampNonNegative(state.resources[key], defaults.resources[key], `resources.${key}`);
+  });
+
+  state.lines = { ...defaults.lines, ...(state.lines || {}) };
+  lineDefs.forEach((line) => {
+    const raw = state.lines[line.id]?.level;
+    const fixed = Math.floor(clampNonNegative(raw, defaults.lines[line.id].level, `lines.${line.id}.level`));
+    state.lines[line.id] = { level: fixed };
+  });
+  if (state.lines.cutter.level < 1) {
+    warnRepair("Cutter level repaired to minimum 1.");
+    state.lines.cutter.level = 1;
+  }
+
+  state.divisions = { ...defaults.divisions, ...(state.divisions || {}) };
+  divisionDefs.forEach((d) => {
+    state.divisions[d.id] = !!state.divisions[d.id];
+  });
+
+  state.modifiers = { ...defaults.modifiers, ...(state.modifiers || {}) };
+  Object.keys(defaults.modifiers).forEach((key) => {
+    state.modifiers[key] = finiteOrDefault(state.modifiers[key], defaults.modifiers[key], `modifiers.${key}`);
+  });
+
+  state.flags = { ...defaults.flags, ...(state.flags || {}) };
+  Object.keys(defaults.flags).forEach((k) => {
+    state.flags[k] = !!state.flags[k];
+  });
+
+  state.metaUpgrades = { ...defaults.metaUpgrades, ...(state.metaUpgrades || {}) };
+  Object.keys(defaults.metaUpgrades).forEach((k) => {
+    state.metaUpgrades[k] = Math.floor(clampNonNegative(state.metaUpgrades[k], defaults.metaUpgrades[k], `metaUpgrades.${k}`));
+  });
+
+  state.rush = { ...defaults.rush, ...(state.rush || {}) };
+  state.rush.activeUntil = clampNonNegative(state.rush.activeUntil, defaults.rush.activeUntil, "rush.activeUntil");
+  state.rush.cooldownUntil = clampNonNegative(state.rush.cooldownUntil, defaults.rush.cooldownUntil, "rush.cooldownUntil");
+
+  state.contractTier = Math.max(1, Math.floor(clampNonNegative(state.contractTier, 1, "contractTier")));
+  state.contractXp = clampNonNegative(state.contractXp, 0, "contractXp");
+  state.completedContracts = Math.floor(clampNonNegative(state.completedContracts, 0, "completedContracts"));
+  state.contractChainDepth = Math.floor(clampNonNegative(state.contractChainDepth, 0, "contractChainDepth"));
+  state.contractBossWins = Math.floor(clampNonNegative(state.contractBossWins, 0, "contractBossWins"));
+
+  state.skillPoints = Math.floor(clampNonNegative(state.skillPoints, defaults.skillPoints, "skillPoints"));
+  state.skillXp = clampNonNegative(state.skillXp, defaults.skillXp, "skillXp");
+  state.skillLevel = Math.max(1, Math.floor(clampNonNegative(state.skillLevel, defaults.skillLevel, "skillLevel")));
+  state.nextSkillWindowMilestone = Math.max(4000, clampNonNegative(state.nextSkillWindowMilestone, defaults.nextSkillWindowMilestone, "nextSkillWindowMilestone"));
+  state.blueprintFragments = Math.floor(clampNonNegative(state.blueprintFragments, defaults.blueprintFragments, "blueprintFragments"));
+  state.windowsMade = clampNonNegative(state.windowsMade, defaults.windowsMade, "windowsMade");
+  state.totalEarned = clampNonNegative(state.totalEarned, defaults.totalEarned, "totalEarned");
+  state.playtime = clampNonNegative(state.playtime, defaults.playtime, "playtime");
+  state.modernizationCount = Math.floor(clampNonNegative(state.modernizationCount, defaults.modernizationCount, "modernizationCount"));
+
+  state.chests = { ...defaults.chests, ...(state.chests || {}) };
+  chestRarities.forEach((r) => {
+    state.chests[r] = Math.floor(clampNonNegative(state.chests[r], 0, `chests.${r}`));
+  });
+
+  if (!Array.isArray(state.activeBoosts)) state.activeBoosts = [];
+  state.activeBoosts = state.activeBoosts
+    .filter((b) => b && typeof b === "object")
+    .map((b) => ({
+      kind: typeof b.kind === "string" ? b.kind : "prod",
+      value: finiteOrDefault(b.value, 0, "activeBoost.value"),
+      until: clampNonNegative(b.until, Date.now(), "activeBoost.until")
+    }))
+    .filter((b) => b.until > Date.now() - 60000);
+
+  if (!Array.isArray(state.pendingClaims)) state.pendingClaims = [];
+  if (!Array.isArray(state.claimedMilestones)) state.claimedMilestones = [];
+  if (!Array.isArray(state.skills)) state.skills = [];
+  if (!Array.isArray(state.blueprints)) state.blueprints = [];
+  if (!Array.isArray(state.contractBoard)) state.contractBoard = [];
+
+  state.skills = state.skills.filter((id) => skillDefs.some((s) => s.id === id));
+  state.blueprints = state.blueprints.filter((id) => blueprintDefs.some((bp) => bp.id === id));
+
+  state.contractBoard = state.contractBoard
+    .filter((c) => c && typeof c === "object")
+    .map((c) => ({
+      ...c,
+      duration: Math.max(1, Math.floor(clampNonNegative(c.duration, 1, "contractBoard.duration"))),
+      windows: Math.max(1, Math.floor(clampNonNegative(c.windows, 1, "contractBoard.windows"))),
+      minRep: clampNonNegative(c.minRep, 0, "contractBoard.minRep"),
+      failRep: clampNonNegative(c.failRep, 1, "contractBoard.failRep"),
+      tierRequired: Math.max(1, Math.floor(clampNonNegative(c.tierRequired || 1, 1, "contractBoard.tierRequired"))),
+      rewards: {
+        cash: clampNonNegative(c.rewards?.cash, 0, "contractBoard.rewards.cash"),
+        rep: clampNonNegative(c.rewards?.rep, 0, "contractBoard.rewards.rep"),
+        research: clampNonNegative(c.rewards?.research, 0, "contractBoard.rewards.research"),
+        parts: clampNonNegative(c.rewards?.parts, 0, "contractBoard.rewards.parts")
+      }
+    }));
+
+  if (state.contract && typeof state.contract === "object") {
+    state.contract.targetWindows = Math.max(1, Math.floor(clampNonNegative(state.contract.targetWindows || state.contract.windows, 1, "contract.targetWindows")));
+    state.contract.progress = Math.min(state.contract.targetWindows, clampNonNegative(state.contract.progress, 0, "contract.progress"));
+    state.contract.remaining = clampNonNegative(state.contract.remaining, 0, "contract.remaining");
+    state.contract.fragmentReward = clampNonNegative(state.contract.fragmentReward || 0, 0, "contract.fragmentReward");
+    state.contract.rewardPack = {
+      cash: clampNonNegative(state.contract.rewardPack?.cash, 0, "contract.rewardPack.cash"),
+      rep: clampNonNegative(state.contract.rewardPack?.rep, 0, "contract.rewardPack.rep"),
+      research: clampNonNegative(state.contract.rewardPack?.research, 0, "contract.rewardPack.research"),
+      parts: clampNonNegative(state.contract.rewardPack?.parts, 0, "contract.rewardPack.parts")
+    };
+    if (state.contract.remaining <= 0 || state.contract.progress >= state.contract.targetWindows) {
+      state.contract.status = "completed";
+      state.contract.remaining = 0;
+      state.contract.progress = state.contract.targetWindows;
+    } else {
+      state.contract.status = "active";
+    }
+  } else {
+    state.contract = null;
+  }
 }
 
 function validateConfig() {
@@ -362,6 +518,10 @@ function gameTick() {
     if (fpsFrameSkip === 1) return;
   }
   try {
+   if (now - lastStateValidationAt > 1500) {
+      validateGameState("tick");
+      lastStateValidationAt = now;
+    }
     const dt = Math.max(0, Math.min(safeNumber((now - state.lastTick) / 1000, "gameTick:dt"), 2.5));
     state.lastTick = now;
     state.playtime += dt;
@@ -618,6 +778,7 @@ function buyLine(lineId) {
   }
   flashMachine(lineId);
   toast(`${def.name} upgraded to Lv ${nextLv}`);
+  validateGameState("buyLine");
   renderAll();
 }
 
@@ -628,6 +789,7 @@ function unlockDivision(id) {
   state.resources.cash -= div.reqCash;
   state.divisions[id] = true;
   toast(`${div.name} division online.`);
+  validateGameState("unlockDivision");
   renderAll();
 }
 
@@ -840,6 +1002,7 @@ function claimContractReward() {
   toast(`Reward claimed: ${c.name}${fragGain ? ` (+${fragGain} fragments)` : ""}`);
   state.contract = null;
   state.contractContext.rushUsed = false;
+  validateGameState("claimContractReward");
   renderAll();
 }
 
@@ -1002,6 +1165,7 @@ function buySkill(skillId) {
   state.skills.push(skillId);
   recalculateProgressionEffects();
   if (skill.type === "keystone") toast(`Keystone selected: ${skill.name}`);
+  validateGameState("buySkill");
   renderAll();
 }
 
@@ -1130,6 +1294,7 @@ function buyModernizationUpgrade(key) {
   state.resources.tokens -= cost;
   state.metaUpgrades[key] = lvl + 1;
   toast(`Modernization upgraded: ${def.name}`);
+  validateGameState("buyModernizationUpgrade");
   setTimeout(() => openModernizationHub(), 120);
 }
 
@@ -1177,6 +1342,7 @@ function performModernize(reward) {
   state.advancedTech = preservedAdvancedTech;
   state.resources.cash += state.metaUpgrades.startCash * 55;
   state.skillPoints += Math.floor(reward / 4);
+  validateGameState("performModernize");
   triggerModernizationEffect();
   openModernizationSummary(summary);
   renderAll();
@@ -1889,6 +2055,7 @@ function handleDataAction(action) {
         const raw = document.getElementById("importBox").value.trim();
         const parsed = JSON.parse(decodeURIComponent(escape(atob(raw))));
         state = normalizeState({ ...defaultState(), ...parsed, lastTick: Date.now() });
+        validateGameState("importSave");
         recalculateProgressionEffects();
         applySettingsToUI();
         closeModal();
@@ -1934,8 +2101,13 @@ function closeModal() {
 }
 
 function autoSave() {
-  state.savedAt = Date.now();
-  localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+  try {
+    validateGameState("autosave");
+    state.savedAt = Date.now();
+    localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+  } catch (error) {
+    console.error("[autoSave] Failed to persist state safely.", error);
+  }
 }
 
 function loadState() {
@@ -1949,7 +2121,14 @@ function loadState() {
       lastTick: Date.now()
     });
   } catch {
-    return defaultState();
+    warnRepair("Corrupted save detected. Recovered with defaults.");
+    const fallback = defaultState();
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify(fallback));
+    } catch {
+      // ignore storage write failures
+    }
+    return fallback;
   }
 }
 
