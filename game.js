@@ -218,6 +218,7 @@ let activeModal = "";
 let fpsFrameSkip = 0;
 let drawerOpen = false;
 let uiRefreshTimer = 0;
+let lastGameLoopErrorAt = 0;
 
 const el = {
   resourceStrip: document.getElementById("resourceStrip"),
@@ -262,6 +263,23 @@ applySettingsToUI();
 renderAll();
 setInterval(gameTick, 250);
 setInterval(autoSave, 10000);
+
+function safeNumber(value, context = "unknown", details = null) {
+  const n = Number(value);
+  if (Number.isFinite(n)) return n;
+  console.warn(`[safeNumber] Invalid numeric value in ${context}. Fallback to 0.`, { value, details });
+  return 0;
+}
+
+function safeDiv(numerator, denominator, context = "divide") {
+  const num = safeNumber(numerator, `${context}:numerator`);
+  const den = safeNumber(denominator, `${context}:denominator`);
+  if (den === 0) {
+    console.warn(`[safeDiv] Division by zero in ${context}. Fallback to 0.`, { numerator, denominator });
+    return 0;
+  }
+  return num / den;
+}
 
 function validateConfig() {
   const unique = (arr, label) => {
@@ -343,71 +361,80 @@ function gameTick() {
     fpsFrameSkip = (fpsFrameSkip + 1) % 2;
     if (fpsFrameSkip === 1) return;
   }
-  const dt = Math.min((now - state.lastTick) / 1000, 2.5);
-  state.lastTick = now;
-  state.playtime += dt;
+  try {
+    const dt = Math.max(0, Math.min(safeNumber((now - state.lastTick) / 1000, "gameTick:dt"), 2.5));
+    state.lastTick = now;
+    state.playtime += dt;
 
-  const windowsPerSec = calcWindowsPerSec();
-  const made = windowsPerSec * dt;
-  state.windowsMade += made;
-  while (state.windowsMade >= state.nextSkillWindowMilestone) {
-    grantSkillXp(1, "production milestone");
-    state.nextSkillWindowMilestone += 4000;
+    const windowsPerSec = Math.max(0, safeNumber(calcWindowsPerSec(), "gameTick:windowsPerSec"));
+    const made = Math.max(0, safeNumber(windowsPerSec * dt, "gameTick:made", { windowsPerSec, dt }));
+    state.windowsMade += made;
+    while (state.windowsMade >= state.nextSkillWindowMilestone) {
+      grantSkillXp(1, "production milestone");
+      state.nextSkillWindowMilestone += 4000;
+    }
+
+    const cashPerW = Math.max(0, safeNumber(cashPerWindow(), "gameTick:cashPerWindow"));
+    const cashGain = Math.max(0, safeNumber(made * cashPerW, "gameTick:cashGain", { made, cashPerW }));
+    state.resources.cash = Math.max(0, safeNumber(state.resources.cash + cashGain, "gameTick:cashTotal"));
+    state.totalEarned = Math.max(0, safeNumber(state.totalEarned + cashGain, "gameTick:totalEarned"));
+
+    if (Math.random() < (0.03 + safeNumber(state.modifiers.partsChance, "gameTick:partsChance")) * dt) {
+      state.resources.parts = Math.max(0, safeNumber(state.resources.parts + 1, "gameTick:parts"));
+      if (Math.random() < 0.12) toast("Industrial part recovered.");
+    }
+
+    state.resources.reputation = Math.max(0, safeNumber(state.resources.reputation + made * 0.0009 * (1 + safeNumber(state.modifiers.reputationGain, "gameTick:repGain")), "gameTick:reputation"));
+
+    tickContract(dt, made);
+    tickModifier(now);
+
+    if (now > state.rush.activeUntil && now < state.rush.cooldownUntil) {
+      const rem = Math.ceil((state.rush.cooldownUntil - now) / 1000);
+      el.rushBtn.disabled = true;
+      el.rushBtn.classList.remove("ready");
+      el.rushBtn.textContent = `Recharging (${rem}s)`;
+      el.rushStatus.textContent = `Rush cooldown: ${rem}s`;
+    } else if (now <= state.rush.activeUntil) {
+      const rem = Math.ceil((state.rush.activeUntil - now) / 1000);
+      el.rushBtn.disabled = true;
+      el.rushBtn.classList.remove("ready");
+      el.rushBtn.textContent = `Boosting (${rem}s)`;
+      el.rushStatus.textContent = `Rush active (${rem}s).`;
+    } else {
+      el.rushBtn.disabled = false;
+      el.rushBtn.classList.add("ready");
+      el.rushBtn.textContent = "Boost Production";
+      el.rushStatus.textContent = "Tap to overclock lines and push your next upgrade.";
+    }
+
+    if (state.settings.autoBoost && now >= state.rush.cooldownUntil && now > state.rush.activeUntil) {
+      activateRush();
+    }
+
+    el.factoryView?.classList.toggle("boosted", now <= state.rush.activeUntil);
+
+    tickerFrame += dt;
+    const perfPenalty = state.settings.lowPerf ? 1.35 : 1;
+    const flowInterval = (now <= state.rush.activeUntil ? 0.55 : 1) * perfPenalty;
+    if (tickerFrame > flowInterval) {
+      if (state.settings.animations) animateFlow();
+      if (el.incomeTicker) el.incomeTicker.textContent = `+$${fmt(safeDiv(cashGain, dt, "gameTick:incomeTicker"))}/s`;
+      if (cashGain > 0.01) spawnMoneyPop(safeDiv(cashGain, dt, "gameTick:moneyPop"), now <= state.rush.activeUntil);
+      tickerFrame = 0;
+    }
+
+    maybeSpawnModifier(now);
+    maybeSpawnClaimEvent(dt);
+    renderHUD();
+    refreshDynamicViews(dt);
+  } catch (error) {
+    if (now - lastGameLoopErrorAt > 3000) {
+      console.error("[gameTick] Recovered from loop error.", error);
+      lastGameLoopErrorAt = now;
+    }
+    state.lastTick = now;
   }
-
-  const cashGain = made * cashPerWindow();
-  state.resources.cash += cashGain;
-  state.totalEarned += cashGain;
-
-  if (Math.random() < (0.03 + state.modifiers.partsChance) * dt) {
-    state.resources.parts += 1;
-    if (Math.random() < 0.12) toast("Industrial part recovered.");
-  }
-
-  state.resources.reputation += made * 0.0009 * (1 + state.modifiers.reputationGain);
-
-  tickContract(dt, made);
-  tickModifier(now);
-
-  if (now > state.rush.activeUntil && now < state.rush.cooldownUntil) {
-    const rem = Math.ceil((state.rush.cooldownUntil - now) / 1000);
-    el.rushBtn.disabled = true;
-    el.rushBtn.classList.remove("ready");
-    el.rushBtn.textContent = `Recharging (${rem}s)`;
-    el.rushStatus.textContent = `Rush cooldown: ${rem}s`;
-  } else if (now <= state.rush.activeUntil) {
-    const rem = Math.ceil((state.rush.activeUntil - now) / 1000);
-    el.rushBtn.disabled = true;
-    el.rushBtn.classList.remove("ready");
-    el.rushBtn.textContent = `Boosting (${rem}s)`;
-    el.rushStatus.textContent = `Rush active (${rem}s).`;
-  } else {
-    el.rushBtn.disabled = false;
-    el.rushBtn.classList.add("ready");
-    el.rushBtn.textContent = "Boost Production";
-    el.rushStatus.textContent = "Tap to overclock lines and push your next upgrade.";
-  }
-
-  if (state.settings.autoBoost && now >= state.rush.cooldownUntil && now > state.rush.activeUntil) {
-    activateRush();
-  }
-
-  el.factoryView?.classList.toggle("boosted", now <= state.rush.activeUntil);
-
-  tickerFrame += dt;
-  const perfPenalty = state.settings.lowPerf ? 1.35 : 1;
-  const flowInterval = (now <= state.rush.activeUntil ? 0.55 : 1) * perfPenalty;
-  if (tickerFrame > flowInterval) {
-    if (state.settings.animations) animateFlow();
-    if (el.incomeTicker) el.incomeTicker.textContent = `+$${fmt(cashGain / dt)}/s`;
-    if (cashGain > 0.01) spawnMoneyPop(cashGain / dt, now <= state.rush.activeUntil);
-    tickerFrame = 0;
-  }
-
-  maybeSpawnModifier(now);
-  maybeSpawnClaimEvent(dt);
-  renderHUD();
-  refreshDynamicViews(dt);
 }
 
 function maybeSpawnClaimEvent(dt) {
@@ -478,15 +505,16 @@ function calcLineSynergyBonus() {
 function economicPressureFactor() {
   const earnedPressure = Math.max(0, Math.log10(1 + state.totalEarned / 180000) * 0.1);
   const levelPressure = Math.max(0, (lineDefs.reduce((sum, line) => sum + state.lines[line.id].level, 0) - 40) * 0.0022);
-  const resist = Math.min(0.32, state.modifiers.economicPressureResist + state.metaUpgrades.strategyBlueprints * 0.01);
+  const resistRaw = Number(state.modifiers.economicPressureResist) + Number(state.metaUpgrades.strategyBlueprints) * 0.01;
+  const resist = Math.min(0.32, Number.isFinite(resistRaw) ? resistRaw : 0);
   return Math.max(0.72, 1 - Math.max(0, earnedPressure + levelPressure - resist));
 }
 
 function getMetaSpecialization() {
   const scores = {
-    Production: (state.metaUpgrades.strategyProd || 0) + (state.metaUpgrades.lineCalibration || 0) * 0.4,
-    Contracts: (state.metaUpgrades.strategyContracts || 0) + (state.metaUpgrades.contractNegotiation || 0) * 0.4,
-    Blueprints: (state.metaUpgrades.strategyBlueprints || 0) + (state.metaUpgrades.fragmentMagnet || 0) * 0.4
+    Production: Number(state.metaUpgrades.strategyProd || 0) + Number(state.metaUpgrades.lineCalibration || 0) * 0.4,
+    Contracts: Number(state.metaUpgrades.strategyContracts || 0) + Number(state.metaUpgrades.contractNegotiation || 0) * 0.4,
+    Blueprints: Number(state.metaUpgrades.strategyBlueprints || 0) + Number(state.metaUpgrades.fragmentMagnet || 0) * 0.4
   };
   const best = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
   return best && best[1] > 0 ? best[0] : "Balanced";
@@ -499,7 +527,7 @@ function calcWindowsPerSec() {
     if (lv > 0) {
       const localBoost = 1 + Math.sqrt(lv) * 0.03;
       const milestoneMul = getLineMilestoneMultiplier(lv);
-      wps += line.baseRate * lv * localBoost * milestoneMul;
+      wps += safeNumber(line.baseRate * lv * localBoost * milestoneMul, `calcWindowsPerSec:${line.id}`);
     }
   });
 
@@ -520,7 +548,10 @@ function calcWindowsPerSec() {
   const specialization = getMetaSpecialization();
   const specializationBoost = specialization === "Production" ? 1.09 : 1;
   const tempProdBoost = 1 + getActiveBoostValue("prod");
-  return wps * divBoost * skillBoost * tokenBoost * rushBoost * modifierMul * startupBoost * calibrationBoost * activePenalty * synergyBoost * specializationBoost * tempProdBoost;
+  const total = wps * divBoost * skillBoost * tokenBoost * rushBoost * modifierMul * startupBoost * calibrationBoost * activePenalty * synergyBoost * specializationBoost * tempProdBoost;
+  return Math.max(0, safeNumber(total, "calcWindowsPerSec:total", {
+    wps, divBoost, skillBoost, tokenBoost, rushBoost, modifierMul, startupBoost, calibrationBoost, activePenalty, synergyBoost, specializationBoost, tempProdBoost
+  }));
 }
 
 function cashPerWindow() {
@@ -531,13 +562,13 @@ function cashPerWindow() {
   const specialization = getMetaSpecialization();
   if (specialization === "Contracts") v *= 0.95;
   if (specialization === "Blueprints") v *= 1.03;
-  return v * economicPressureFactor();
+  return Math.max(0, safeNumber(v * economicPressureFactor(), "cashPerWindow:total", { base: v }));
 }
 
 function getActiveBoostValue(kind) {
   const now = Date.now();
   state.activeBoosts = state.activeBoosts.filter((b) => b.until > now);
-  return state.activeBoosts.filter((b) => b.kind === kind).reduce((sum, b) => sum + b.value, 0);
+  return safeNumber(state.activeBoosts.filter((b) => b.kind === kind).reduce((sum, b) => sum + safeNumber(b.value, "getActiveBoostValue:value", b), 0), "getActiveBoostValue:sum");
 }
 
 function lineUpgradeCost(line) {
@@ -555,9 +586,9 @@ function isLineUnlocked(line) {
 
 function secondsToAfford(cost) {
   if (state.resources.cash >= cost) return 0;
-  const rps = calcWindowsPerSec() * cashPerWindow();
+  const rps = Math.max(0, safeNumber(calcWindowsPerSec() * cashPerWindow(), "secondsToAfford:rps", { cost }));
   if (rps <= 0.01) return Infinity;
-  return Math.ceil((cost - state.resources.cash) / rps);
+  return Math.ceil(safeDiv(cost - state.resources.cash, rps, "secondsToAfford:eta"));
 }
 
 function timeToAffordLabel(seconds) {
@@ -1423,8 +1454,10 @@ function renderHUD() {
     hudCache.resources = resourceMarkup;
   }
 
-  const currentRps = `$${fmt(calcWindowsPerSec() * cashPerWindow())}`;
-  const currentWps = fmt(calcWindowsPerSec());
+  const liveWps = Math.max(0, safeNumber(calcWindowsPerSec(), "renderHUD:liveWps"));
+  const liveRps = Math.max(0, safeNumber(liveWps * cashPerWindow(), "renderHUD:liveRps", { liveWps }));
+  const currentRps = `$${fmt(liveRps)}`;
+  const currentWps = fmt(liveWps);
   const currentCash = `$${fmt(state.resources.cash || 0)}`;
   if (el.rpsLabel && currentRps !== hudCache.rps) {
     el.rpsLabel.textContent = currentRps;
@@ -1922,6 +1955,31 @@ function loadState() {
 
 function normalizeState(incoming) {
   const next = incoming;
+  const defaults = defaultState();
+  next.resources = { ...defaults.resources, ...(next.resources || {}) };
+  next.modifiers = { ...defaults.modifiers, ...(next.modifiers || {}) };
+  next.flags = { ...defaults.flags, ...(next.flags || {}) };
+  next.metaUpgrades = { ...defaults.metaUpgrades, ...(next.metaUpgrades || {}) };
+  next.settings = { ...defaults.settings, ...(next.settings || {}) };
+  next.rush = { ...defaults.rush, ...(next.rush || {}) };
+
+  Object.keys(next.resources).forEach((key) => {
+    const value = Number(next.resources[key]);
+    next.resources[key] = Number.isFinite(value) ? value : defaults.resources[key] || 0;
+  });
+  Object.keys(next.modifiers).forEach((key) => {
+    const value = Number(next.modifiers[key]);
+    next.modifiers[key] = Number.isFinite(value) ? value : defaults.modifiers[key] || 0;
+  });
+  Object.keys(next.metaUpgrades).forEach((key) => {
+    const value = Number(next.metaUpgrades[key]);
+    next.metaUpgrades[key] = Number.isFinite(value) ? value : defaults.metaUpgrades[key] || 0;
+  });
+  ["activeUntil", "cooldownUntil"].forEach((k) => {
+    const value = Number(next.rush[k]);
+    next.rush[k] = Number.isFinite(value) ? value : defaults.rush[k];
+  });
+
   if (next.metaUpgrades?.kickstart) next.metaUpgrades.startCash += next.metaUpgrades.kickstart;
   if (next.metaUpgrades?.contractMastery) next.metaUpgrades.contractNegotiation += next.metaUpgrades.contractMastery;
   if (next.metaUpgrades?.offlineLab) next.metaUpgrades.offlineLogistics += next.metaUpgrades.offlineLab;
@@ -1960,6 +2018,7 @@ function normalizeState(incoming) {
 }
 
 function fmt(n) {
+  if (!Number.isFinite(n)) return "0";
   if (n >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
   if (n >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
   if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
