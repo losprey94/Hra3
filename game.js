@@ -248,6 +248,8 @@ const el = {
   claimList: document.getElementById("claimList"),
   rushBtn: document.getElementById("rushBtn"),
   rushStatus: document.getElementById("rushStatus"),
+  missionProgress: document.getElementById("missionProgress"),
+  missionHint: document.getElementById("missionHint"),
   rpsLabel: document.getElementById("rpsLabel"),
   wpsLabel: document.getElementById("wpsLabel"),
   cashFocus: document.getElementById("cashFocus"),
@@ -1718,6 +1720,14 @@ function renderHUD() {
   }
   const goalReady = eta === 0;
   el.goalLabel?.classList.toggle("ready", goalReady);
+  if (el.missionProgress) {
+    const pct = Math.max(2, Math.min(100, Math.round((state.resources.cash / Math.max(1, goalTarget.cost)) * 100)));
+    el.missionProgress.style.width = `${pct}%`;
+  }
+  if (el.missionHint) {
+    const hint = goalReady ? "Goal ready" : (eta < 90 ? "Close to next upgrade" : "Build income");
+    el.missionHint.textContent = hint;
+  }
   if (goalReady && !goalReadyLastTick) {
     toast("Goal ready: next upgrade is affordable.");
   }
@@ -1890,23 +1900,20 @@ function renderBlueprints() {
 
 function bootstrapFactoryVisual() {
   const machinePos = {
-    cutter: { x: 12, y: 138, stage: "Frame Cut" },
-    furnace: { x: 100, y: 64, stage: "Glass Forge" },
-    assembler: { x: 186, y: 138, stage: "Panel Fit" },
-    qc: { x: 278, y: 64, stage: "QC Scan" },
-    pack: { x: 360, y: 138, stage: "Pack Out" }
+    cutter: { x: 16, y: 134, stage: "Frame Cut", icon: "🪚" },
+    furnace: { x: 150, y: 48, stage: "Glass Forge", icon: "🔥" },
+    assembler: { x: 150, y: 140, stage: "Panel Fit", icon: "🤖" },
+    qc: { x: 286, y: 48, stage: "QC Scan", icon: "🔍" },
+    pack: { x: 286, y: 140, stage: "Pack Out", icon: "📦" }
   };
 
-  const lanes = [
-    { y: 86, text: "Glass line" },
-    { y: 160, text: "Frame line" }
-  ];
+  const lanes = [{ y: 102, text: "Production grid" }];
 
   const belts = [
-    { x: 74, y: 160, w: 30 },
-    { x: 162, y: 86, w: 30 },
-    { x: 248, y: 160, w: 30 },
-    { x: 340, y: 86, w: 30 }
+    { x: 104, y: 168, w: 52 },
+    { x: 240, y: 168, w: 52 },
+    { x: 104, y: 82, w: 52 },
+    { x: 240, y: 82, w: 52 }
   ];
 
   lanes.forEach((lane) => {
@@ -1923,7 +1930,13 @@ function bootstrapFactoryVisual() {
     m.id = `machine-${id}`;
     m.style.left = `${p.x}px`;
     m.style.top = `${p.y}px`;
-    m.innerHTML = `<span class="lamp"></span><span class="stamp"></span><span class="stage">${p.stage}</span>`;
+    m.innerHTML = `
+      <span class="lamp"></span>
+      <span class="machine-icon">${p.icon}</span>
+      <span class="machine-title">${p.stage}</span>
+      <span class="machine-meta">Lv <b data-machine-lv="${id}">0</b> • <b data-machine-out="${id}">0.00</b> w/s</span>
+      <span class="machine-meter"><i data-machine-meter="${id}" style="width:4%"></i></span>
+    `;
     el.factoryGrid.appendChild(m);
   });
 
@@ -1985,7 +1998,15 @@ function updateMachineActivity() {
   lineDefs.forEach((line) => {
     const node = document.getElementById(`machine-${line.id}`);
     if (!node) return;
-    if (state.lines[line.id].level > 0) {
+    const lv = state.lines[line.id].level;
+    const output = lv > 0 ? line.baseRate * lv * (1 + Math.sqrt(lv) * 0.03) : 0;
+    const meter = node.querySelector(`[data-machine-meter="${line.id}"]`);
+    const lvEl = node.querySelector(`[data-machine-lv="${line.id}"]`);
+    const outEl = node.querySelector(`[data-machine-out="${line.id}"]`);
+    if (lvEl) lvEl.textContent = `${lv}`;
+    if (outEl) outEl.textContent = fmt(output);
+    if (meter) meter.style.width = `${Math.max(4, Math.min(100, lv * 3 + (lv > 0 ? 12 : 0)))}%`;
+    if (lv > 0) {
       node.classList.add("active");
     } else {
       node.classList.remove("active");

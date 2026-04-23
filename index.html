@@ -25,19 +25,17 @@
             <span class="mission-state">ACTIVE</span>
           </div>
           <p id="goalLabel" class="mission-goal">Goal: Upgrade the Cutter</p>
-          <div class="mission-metrics">
-            <span>Income <strong id="rpsLabel">$0</strong>/s</span>
-            <span>Output <strong id="wpsLabel">0</strong> w/s</span>
-            <span>Cash <strong id="cashFocus">$0</strong></span>
-          </div>
+          <div class="mod-progress mission-progress"><span id="missionProgress" style="width:0%"></span></div>
+          <div class="mission-inline"><span id="missionHint">Build momentum</span><span><strong id="rpsLabel">$0</strong>/s • <strong id="wpsLabel">0</strong> w/s • <strong id="cashFocus">$0</strong></span></div>
         </div>
 
         <div class="factory-view" id="factoryView">
           <svg class="factory-links" viewBox="0 0 400 210" preserveAspectRatio="none" aria-hidden="true">
-            <path d="M78 157 L102 157 L102 90 L182 90" />
-            <path d="M178 165 L206 165 L206 165 L274 165" />
-            <path d="M274 90 L350 90" />
-            <path d="M274 165 L350 165" />
+            <path d="M112 168 L150 168" />
+            <path d="M248 168 L286 168" />
+            <path d="M112 82 L150 82" />
+            <path d="M248 82 L286 82" />
+            <path d="M198 124 L198 92" />
           </svg>
           <div class="factory-bg-layer"></div>
           <div class="energy-wave" id="energyWave"></div>
@@ -118,11 +116,11 @@
     </main>
 
     <nav class="bottom-nav">
-      <button data-tab="home" class="tab active"><span class="tab-ico">⌂</span><span>Home</span></button>
-      <button data-tab="factory" class="tab"><span class="tab-ico">🏭</span><span>Factory</span></button>
-      <button data-tab="skills" class="tab"><span class="tab-ico">🧠</span><span>Skills</span></button>
-      <button data-tab="blueprints" class="tab"><span class="tab-ico">🧩</span><span>Blueprints</span></button>
-      <button data-tab="contracts" class="tab"><span class="tab-ico">📜</span><span>Contracts</span></button>
+      <button data-tab="home" class="tab active"><span class="tab-ico">◉</span><span>Home</span></button>
+      <button data-tab="factory" class="tab"><span class="tab-ico">▣</span><span>Factory</span></button>
+      <button data-tab="skills" class="tab"><span class="tab-ico">◇</span><span>Skills</span></button>
+      <button data-tab="blueprints" class="tab"><span class="tab-ico">◈</span><span>Blueprints</span></button>
+      <button data-tab="contracts" class="tab"><span class="tab-ico">▤</span><span>Contracts</span></button>
     </nav>
 
     <div id="drawerOverlay" class="drawer-overlay"></div>
