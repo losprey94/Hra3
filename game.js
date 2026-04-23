@@ -17,12 +17,28 @@ const divisionDefs = [
   { id: "aeroshield", name: "AeroShield Lab", reqCash: 220000, bonus: 0.18 }
 ];
 
-const contracts = [
-  { id: "starter", name: "Neighborhood Retrofit", type: "Standard", duration: 160, windows: 95, minRep: 0, failRep: 2, rewards: { cash: 110, rep: 2, parts: 2 }, fragments: 1 },
-  { id: "green", name: "Eco Tower Fitout", type: "Efficiency", duration: 360, windows: 320, minRep: 10, failRep: 3, rewards: { cash: 480, rep: 4, research: 5 }, fragments: 2, special: "research_bonus" },
-  { id: "airport", name: "Airport Terminal Rush", type: "Rush", duration: 560, windows: 700, minRep: 24, failRep: 4, rewards: { cash: 1300, rep: 7, parts: 9 }, fragments: 3, special: "rush_bonus" },
-  { id: "fragile", name: "Fragile Glass Emergency", type: "Risky", duration: 420, windows: 560, minRep: 28, failRep: 8, rewards: { cash: 1900, rep: 5, parts: 6 }, fragments: 4, special: "risky_parts" },
-  { id: "lux", name: "Luxury Skyline Contract", type: "Premium", duration: 1020, windows: 1760, minRep: 42, failRep: 6, rewards: { cash: 3900, rep: 11, research: 15, parts: 16 }, fragments: 7, special: "blueprint_fragments_bonus" }
+const contractTemplates = [
+  { id: "starter", name: "Neighborhood Retrofit", baseDuration: 170, baseWindows: 110, minRep: 0, failRep: 2, rewards: { cash: 130, rep: 2, parts: 2 }, fragments: 1 },
+  { id: "green", name: "Eco Tower Fitout", baseDuration: 340, baseWindows: 300, minRep: 10, failRep: 3, rewards: { cash: 470, rep: 4, research: 5 }, fragments: 2, special: "research_bonus" },
+  { id: "airport", name: "Airport Terminal Rush", baseDuration: 560, baseWindows: 680, minRep: 24, failRep: 4, rewards: { cash: 1250, rep: 7, parts: 9 }, fragments: 3, special: "rush_bonus" },
+  { id: "fragile", name: "Fragile Glass Emergency", baseDuration: 430, baseWindows: 540, minRep: 28, failRep: 8, rewards: { cash: 1850, rep: 5, parts: 6 }, fragments: 4, special: "risky_parts" },
+  { id: "lux", name: "Luxury Skyline Contract", baseDuration: 980, baseWindows: 1680, minRep: 42, failRep: 6, rewards: { cash: 3850, rep: 11, research: 15, parts: 16 }, fragments: 7, special: "blueprint_fragments_bonus" }
+];
+
+const contractTypes = {
+  Standard: { durationMul: 1, rewardMul: 1, windowsMul: 1, repBonus: 0, fragmentMul: 1, riskPenaltyChance: 0, reqRepMul: 1 },
+  Rush: { durationMul: 0.68, rewardMul: 1.22, windowsMul: 1.1, repBonus: 1, fragmentMul: 0.85, riskPenaltyChance: 0, reqRepMul: 1.2 },
+  Premium: { durationMul: 1.35, rewardMul: 1.42, windowsMul: 1.25, repBonus: 2, fragmentMul: 1.65, riskPenaltyChance: 0, reqRepMul: 1.25 },
+  Risky: { durationMul: 0.92, rewardMul: 1.5, windowsMul: 1.12, repBonus: 0, fragmentMul: 1.15, riskPenaltyChance: 0.24, reqRepMul: 1.1 }
+};
+
+const contractModifiers = [
+  { id: "high_margin", text: "+30% reward, +40% duration", apply: (c) => { c.rewardMul *= 1.3; c.durationMul *= 1.4; } },
+  { id: "speed_bid", text: "-50% duration, -20% reward", apply: (c) => { c.durationMul *= 0.5; c.rewardMul *= 0.8; } },
+  { id: "frag_bonus", text: "+2 fragments", apply: (c) => { c.flatFragments += 2; } },
+  { id: "line_req", text: "Requires Assembly Robot Lv 6", apply: (c) => { c.requiredLine = { id: "assembler", level: 6 }; c.rewardMul *= 1.12; } },
+  { id: "tight_spec", text: "+20% windows, +15% reward", apply: (c) => { c.windowsMul *= 1.2; c.rewardMul *= 1.15; } },
+  { id: "secure_client", text: "-25% fail reputation loss", apply: (c) => { c.failRepMul *= 0.75; } }
 ];
 
 const skillDefs = [
@@ -82,6 +98,8 @@ const defaultState = () => ({
   lines: Object.fromEntries(lineDefs.map((l) => [l.id, { level: l.id === "cutter" ? 1 : 0 }])),
   divisions: Object.fromEntries(divisionDefs.map((d) => [d.id, false])),
   contract: null,
+  contractBoard: [],
+  contractRefreshAt: 0,
   contractContext: { rushUsed: false },
   completedContracts: 0,
   skills: [],
@@ -171,6 +189,8 @@ const el = {
   divisionList: document.getElementById("divisionList"),
   contractList: document.getElementById("contractList"),
   activeContract: document.getElementById("activeContract"),
+  contractRefreshBtn: document.getElementById("contractRefreshBtn"),
+  contractRefreshStatus: document.getElementById("contractRefreshStatus"),
   skillBranches: document.getElementById("skillBranches"),
   blueprintList: document.getElementById("blueprintList"),
   rushBtn: document.getElementById("rushBtn"),
@@ -211,7 +231,7 @@ function validateConfig() {
   };
   unique(lineDefs, "line");
   unique(divisionDefs, "division");
-  unique(contracts, "contract");
+  unique(contractTemplates, "contract");
   unique(skillDefs, "skill");
   unique(blueprintDefs, "blueprint");
 
@@ -477,31 +497,87 @@ function activateRush() {
   toast("Rush Order accepted! Lines overclocked.");
 }
 
+function generateContractOffer() {
+  const template = contractTemplates[Math.floor(Math.random() * contractTemplates.length)];
+  const typeNames = Object.keys(contractTypes);
+  const type = typeNames[Math.floor(Math.random() * typeNames.length)];
+  const typeCfg = contractTypes[type];
+  const modPack = {
+    durationMul: typeCfg.durationMul,
+    rewardMul: typeCfg.rewardMul,
+    windowsMul: typeCfg.windowsMul,
+    fragmentMul: typeCfg.fragmentMul,
+    reqRepMul: typeCfg.reqRepMul,
+    failRepMul: 1,
+    flatFragments: 0,
+    requiredLine: null
+  };
+  const mods = [...contractModifiers].sort(() => Math.random() - 0.5).slice(0, Math.random() < 0.45 ? 2 : 1);
+  mods.forEach((m) => m.apply(modPack));
+  const tierBoost = Math.floor(state.completedContracts / 3);
+  const windows = Math.ceil(template.baseWindows * (1 + tierBoost * 0.22) * modPack.windowsMul);
+  const duration = Math.ceil(template.baseDuration * modPack.durationMul);
+  const rewards = {
+    cash: Math.ceil(template.rewards.cash * (1 + tierBoost * 0.06) * modPack.rewardMul),
+    rep: Math.ceil((template.rewards.rep || 0) + typeCfg.repBonus),
+    research: Math.ceil((template.rewards.research || 0) * modPack.rewardMul),
+    parts: Math.ceil((template.rewards.parts || 0) * modPack.rewardMul)
+  };
+  const fragments = Math.max(0, Math.round((template.fragments || 0) * modPack.fragmentMul) + modPack.flatFragments);
+  return {
+    id: `offer_${Date.now()}_${Math.floor(Math.random() * 99999)}`,
+    templateId: template.id,
+    name: template.name,
+    type,
+    duration,
+    windows,
+    minRep: Math.ceil(template.minRep * modPack.reqRepMul),
+    failRep: Math.max(1, Math.round((template.failRep || 2.5) * modPack.failRepMul)),
+    rewards,
+    fragmentReward: fragments,
+    special: template.special || null,
+    modifiers: mods.map((m) => m.text),
+    requiredLine: modPack.requiredLine,
+    riskPenaltyChance: typeCfg.riskPenaltyChance
+  };
+}
+
+function ensureContractBoard() {
+  if (state.contractBoard.length >= 4) return;
+  while (state.contractBoard.length < 4) {
+    state.contractBoard.push(generateContractOffer());
+  }
+}
+
+function refreshContractBoard(force = false) {
+  const now = Date.now();
+  if (!force && now < state.contractRefreshAt) return false;
+  state.contractBoard = [];
+  ensureContractBoard();
+  state.contractRefreshAt = now + 45000;
+  return true;
+}
+
 function startContract(id) {
   if (state.contract) return;
-  const c = contracts.find((x) => x.id === id);
+  const c = state.contractBoard.find((x) => x.id === id);
   if (!c) return;
   if (state.resources.reputation < c.minRep) return;
-  const tierBoost = Math.floor(state.completedContracts / 3);
-  const scaledWindows = Math.ceil(c.windows * (1 + tierBoost * 0.26));
-  const scaledRewards = {
-    cash: Math.ceil(c.rewards.cash * (1 + tierBoost * 0.06)),
-    rep: c.rewards.rep || 0,
-    research: c.rewards.research || 0,
-    parts: c.rewards.parts || 0
-  };
+  if (c.requiredLine && state.lines[c.requiredLine.id].level < c.requiredLine.level) return;
   state.contract = {
     ...c,
-    targetWindows: scaledWindows,
-    rewardPack: scaledRewards,
-    fragmentReward: c.fragments || 0,
+    targetWindows: c.windows,
+    rewardPack: c.rewards,
+    fragmentReward: c.fragmentReward || 0,
     remaining: Math.ceil(c.duration * state.modifiers.contractDurationMul),
     progress: 0,
     status: "active",
     rewardGranted: false
   };
+  state.contractBoard = state.contractBoard.filter((x) => x.id !== id);
+  ensureContractBoard();
   state.contractContext.rushUsed = false;
-  toast(`Contract started: ${c.name}`);
+  toast(`Contract started: ${c.name} (${c.type})`);
   renderAll();
 }
 
@@ -551,6 +627,10 @@ function claimContractReward() {
   const mastery = state.metaUpgrades.contractNegotiation * 0.03;
   let mult = 1 + Math.min(0.32, state.modifiers.contractReward) + mastery;
   if (c.type === "Premium") mult += state.modifiers.premiumContractReward;
+  if (c.type === "Risky" && Math.random() < (c.riskPenaltyChance || 0)) {
+    mult *= 0.72;
+    toast("Risk event: payout reduced.");
+  }
   if (state.flags.continuousCasting) mult *= 0.9;
   if (state.flags.priorityPipeline) mult *= 1.06;
   state.resources.cash += (c.rewardPack.cash || 0) * mult;
@@ -1102,6 +1182,7 @@ function renderDivisions() {
 }
 
 function renderContracts() {
+  ensureContractBoard();
   if (state.contract) {
     const c = state.contract;
     const pct = Math.min(100, (c.progress / c.targetWindows) * 100);
@@ -1118,17 +1199,40 @@ function renderContracts() {
     el.activeContract.innerHTML = `<div class="row"><div class="row-head"><strong>No active contract</strong><span>Idle</span></div><div class="row-meta"><span>Select one below.</span><span></span></div></div>`;
   }
 
-  const tierBoost = Math.floor(state.completedContracts / 3);
-  el.contractList.innerHTML = contracts.map((c) => {
+  const best = state.contractBoard.reduce((pick, c) => {
+    const value = c.rewards.cash / Math.max(1, c.duration);
+    return (!pick || value > pick.value) ? { id: c.id, value } : pick;
+  }, null);
+  el.contractList.innerHTML = state.contractBoard.map((c) => {
     const lock = state.resources.reputation < c.minRep;
-    const need = Math.ceil(c.windows * (1 + tierBoost * 0.26));
-    const rewardCash = Math.ceil(c.rewards.cash * (1 + tierBoost * 0.06));
-    const special = c.special ? `Special: ${c.special.replaceAll("_", " ")}` : "Special: none";
-    return `<div class="row contract-card state-available"><div class="row-head"><strong>${c.name}</strong><span>${c.type}</span></div><div class="row-meta"><span>Need ${need} windows in ${c.duration}s</span><span>Rep ${c.minRep.toFixed(0)}</span></div><div class="row-meta"><span>Reward: $${fmt(rewardCash)} + extras</span><span>Fragments +${c.fragments || 0}</span></div><div class="row-meta"><span>${special}</span><span>${lock ? "Locked" : "Ready"} • Fail -${c.failRep || 2} rep</span></div>${!lock && !state.contract ? `<button class="action-btn" data-contract="${c.id}">Start</button>` : ""}</div>`;
+    const lineLock = c.requiredLine && state.lines[c.requiredLine.id].level < c.requiredLine.level;
+    const statusText = lock ? "Rep locked" : (lineLock ? "Line locked" : "Ready");
+    const special = c.modifiers?.length ? c.modifiers.join(" • ") : "No modifiers";
+    const typeClass = `type-${c.type.toLowerCase()}`;
+    return `<div class="row contract-card state-available ${typeClass} ${best?.id === c.id ? "best-option" : ""}">
+      <div class="row-head"><strong>${c.name}</strong><span>${c.type}</span></div>
+      <div class="row-meta"><span>Need ${c.windows} windows in ${c.duration}s</span><span>Rep ${c.minRep.toFixed(0)}</span></div>
+      <div class="row-meta"><span>Reward: $${fmt(c.rewards.cash)} + extras</span><span>Fragments +${c.fragmentReward || 0}</span></div>
+      <div class="row-meta"><span>${special}</span><span>${statusText} • Fail -${c.failRep} rep</span></div>
+      ${c.requiredLine ? `<div class="row-meta"><span>Requires ${lineDefs.find((l) => l.id === c.requiredLine.id)?.name || "Line"} Lv ${c.requiredLine.level}</span><span></span></div>` : ""}
+      ${(!lock && !lineLock && !state.contract) ? `<button class="action-btn" data-contract="${c.id}">Start</button>` : ""}
+    </div>`;
   }).join("");
+
+  const refreshReady = Date.now() >= state.contractRefreshAt;
+  if (el.contractRefreshBtn) el.contractRefreshBtn.disabled = !!state.contract || !refreshReady;
+  if (el.contractRefreshStatus) {
+    const sec = Math.max(0, Math.ceil((state.contractRefreshAt - Date.now()) / 1000));
+    el.contractRefreshStatus.textContent = refreshReady ? "Refresh available. Choose your next strategy." : `New offers in ${sec}s`;
+  }
 
   el.contractList.querySelectorAll("button[data-contract]").forEach((btn) => btn.addEventListener("click", () => startContract(btn.dataset.contract)));
   el.activeContract.querySelector("[data-claim-contract]")?.addEventListener("click", claimContractReward);
+  if (el.contractRefreshBtn) {
+    el.contractRefreshBtn.onclick = () => {
+      if (refreshContractBoard()) renderContracts();
+    };
+  }
 }
 
 function renderSkills() {
@@ -1488,6 +1592,8 @@ function normalizeState(incoming) {
   if (next.metaUpgrades?.offlineLab) next.metaUpgrades.offlineLogistics += next.metaUpgrades.offlineLab;
   if (next.metaUpgrades?.blueprintIntel) next.metaUpgrades.fragmentMagnet += next.metaUpgrades.blueprintIntel;
   next.blueprints = (next.blueprints || []).filter((id) => blueprintDefs.some((bp) => bp.id === id));
+  if (!Array.isArray(next.contractBoard)) next.contractBoard = [];
+  if (typeof next.contractRefreshAt !== "number") next.contractRefreshAt = 0;
   next.skills = (next.skills || []).filter((id) => skillDefs.some((s) => s.id === id));
   if (typeof next.skillPoints !== "number") next.skillPoints = 1;
   if (typeof next.skillXp !== "number") next.skillXp = 0;
