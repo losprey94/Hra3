@@ -891,6 +891,14 @@ body.modernize-flash::after {
   color: #d8e8ff;
 }
 
+.reward-hub .list {
+  margin-top: 6px;
+}
+
+.reward-hub .row {
+  margin-top: 6px;
+}
+
 .list {
   display: grid;
   gap: 8px;

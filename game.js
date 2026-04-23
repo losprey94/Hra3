@@ -41,6 +41,16 @@ const contractModifiers = [
   { id: "secure_client", text: "-25% fail reputation loss", apply: (c) => { c.failRepMul *= 0.75; } }
 ];
 
+const chestRarities = ["common", "rare", "epic", "legendary"];
+
+const milestoneDefs = [
+  { id: "m_short_1", tier: "Short", label: "Produce 2,500 windows", progress: () => state.windowsMade / 2500, reward: { cash: 320, fragments: 2 } },
+  { id: "m_short_2", tier: "Short", label: "Complete 5 contracts", progress: () => state.completedContracts / 5, reward: { research: 8, chest: "common" } },
+  { id: "m_mid_1", tier: "Mid", label: "Unlock 2 blueprints", progress: () => state.blueprints.length / 2, reward: { chest: "rare", fragments: 4 } },
+  { id: "m_mid_2", tier: "Mid", label: "Earn $50K total", progress: () => state.totalEarned / 50000, reward: { tokens: 1, chest: "epic" } },
+  { id: "m_long_1", tier: "Long", label: "Complete 20 contracts", progress: () => state.completedContracts / 20, reward: { tokens: 2, chest: "legendary" } }
+];
+
 const skillDefs = [
   { id: "prod_1", name: "Line Tuning", branch: "Production", tier: 1, cost: 1, type: "small", desc: "+4% production speed", effect: () => state.modifiers.prod += 0.04 },
   { id: "prod_2", name: "Cut Precision", branch: "Production", tier: 2, cost: 2, type: "small", prereq: "prod_1", desc: "+4% production speed", effect: () => state.modifiers.prod += 0.04 },
@@ -102,6 +112,10 @@ const defaultState = () => ({
   contractRefreshAt: 0,
   contractContext: { rushUsed: false },
   completedContracts: 0,
+  chests: { common: 0, rare: 0, epic: 0, legendary: 0 },
+  claimedMilestones: [],
+  pendingClaims: [],
+  activeBoosts: [],
   skills: [],
   skillPoints: 1,
   skillXp: 0,
@@ -193,6 +207,11 @@ const el = {
   contractRefreshStatus: document.getElementById("contractRefreshStatus"),
   skillBranches: document.getElementById("skillBranches"),
   blueprintList: document.getElementById("blueprintList"),
+  openChestBtn: document.getElementById("openChestBtn"),
+  chestCountLabel: document.getElementById("chestCountLabel"),
+  activeBoostList: document.getElementById("activeBoostList"),
+  milestoneList: document.getElementById("milestoneList"),
+  claimList: document.getElementById("claimList"),
   rushBtn: document.getElementById("rushBtn"),
   rushStatus: document.getElementById("rushStatus"),
   rpsLabel: document.getElementById("rpsLabel"),
@@ -270,6 +289,7 @@ function bindEvents() {
     toast("Game saved.");
   });
   document.getElementById("resetBtn")?.addEventListener("click", hardReset);
+  el.openChestBtn?.addEventListener("click", openChestPanel);
 
   el.modalLayer?.addEventListener("click", (e) => {
     if (e.target === el.modalLayer) closeModal();
@@ -363,8 +383,19 @@ function gameTick() {
   }
 
   maybeSpawnModifier(now);
+  maybeSpawnClaimEvent(dt);
   renderHUD();
   refreshDynamicViews(dt);
+}
+
+function maybeSpawnClaimEvent(dt) {
+  if (state.pendingClaims.some((c) => c.kind === "event")) return;
+  if (Math.random() > 0.0012 * dt) return;
+  const event = Math.random() < 0.5
+    ? { title: "Supplier Windfall", desc: "Claim a quick cash injection.", reward: { cash: 600 } }
+    : { title: "Overclock Window", desc: "Claim a 25s production surge.", reward: { boost: { kind: "prod", value: 0.25, duration: 25000 } } };
+  state.pendingClaims.push({ id: `ev_${Date.now()}`, kind: "event", ...event });
+  toast(`Event ready: ${event.title}`);
 }
 
 function refreshDynamicViews(dt) {
@@ -376,6 +407,9 @@ function refreshDynamicViews(dt) {
   if (activeScreen === "screen-factory") {
     renderFactory();
     renderDivisions();
+  }
+  if (activeScreen === "screen-home") {
+    renderRewardHub();
   }
   if (activeScreen === "screen-contracts" || state.contract) {
     renderContracts();
@@ -414,15 +448,22 @@ function calcWindowsPerSec() {
 
   if (state.flags.continuousCasting) wps *= 1.12;
   if (state.flags.zeroDefect) wps *= 0.95;
-  return wps * divBoost * skillBoost * tokenBoost * rushBoost * modifierMul * startupBoost * calibrationBoost * activePenalty;
+  const tempProdBoost = 1 + getActiveBoostValue("prod");
+  return wps * divBoost * skillBoost * tokenBoost * rushBoost * modifierMul * startupBoost * calibrationBoost * activePenalty * tempProdBoost;
 }
 
 function cashPerWindow() {
-  let v = 2.7 * (1 + state.modifiers.cashBonus);
+  let v = 2.7 * (1 + state.modifiers.cashBonus + getActiveBoostValue("cash"));
   if (state.flags.ventureCapital && state.resources.cash < 1200) v *= 1.08;
   if (state.flags.priorityPipeline) v *= 0.94;
   if (state.activeModifier && state.activeModifier.cashMul) v *= state.activeModifier.cashMul;
   return v;
+}
+
+function getActiveBoostValue(kind) {
+  const now = Date.now();
+  state.activeBoosts = state.activeBoosts.filter((b) => b.until > now);
+  return state.activeBoosts.filter((b) => b.kind === kind).reduce((sum, b) => sum + b.value, 0);
 }
 
 function lineUpgradeCost(line) {
@@ -651,10 +692,60 @@ function claimContractReward() {
   grantSkillXp(1 + (c.type === "Premium" ? 1 : 0), "contract completion");
 
   state.completedContracts += 1;
+  maybeAwardChest(c);
   showRewardPopup(`Claimed +$${fmt((c.rewardPack.cash || 0) * mult)}`);
   toast(`Reward claimed: ${c.name}${fragGain ? ` (+${fragGain} fragments)` : ""}`);
   state.contract = null;
   state.contractContext.rushUsed = false;
+  renderAll();
+}
+
+function maybeAwardChest(contract) {
+  const roll = Math.random();
+  let rarity = null;
+  if (contract.type === "Premium" && roll < 0.42) rarity = roll < 0.08 ? "legendary" : "epic";
+  else if (contract.type === "Risky" && roll < 0.28) rarity = roll < 0.07 ? "epic" : "rare";
+  else if (contract.type === "Rush" && roll < 0.2) rarity = "rare";
+  else if (roll < 0.14) rarity = "common";
+  if (!rarity) return;
+  state.chests[rarity] = (state.chests[rarity] || 0) + 1;
+  toast(`${rarity[0].toUpperCase()}${rarity.slice(1)} chest acquired.`);
+}
+
+function openChestPanel() {
+  const available = chestRarities.filter((r) => (state.chests[r] || 0) > 0);
+  if (!available.length) {
+    toast("No chests available.");
+    return;
+  }
+  const buttons = available.map((r) => `<button class="action-btn" data-open-chest="${r}">Open ${r[0].toUpperCase()}${r.slice(1)} (${state.chests[r]})</button>`).join("");
+  openModal(`<h3>Chest Vault</h3><p>Open a chest to reveal instant rewards and temporary boosts.</p>${buttons}`);
+  document.querySelectorAll("[data-open-chest]").forEach((btn) => {
+    btn.addEventListener("click", () => openChest(btn.dataset.openChest));
+  });
+}
+
+function openChest(rarity) {
+  if (!state.chests[rarity]) return;
+  state.chests[rarity] -= 1;
+  const rewardText = [];
+  const power = { common: 1, rare: 1.45, epic: 2.1, legendary: 3.2 }[rarity] || 1;
+  const cash = Math.round((180 + Math.random() * 260) * power);
+  state.resources.cash += cash;
+  rewardText.push(`+$${fmt(cash)}`);
+  if (Math.random() < 0.65) {
+    const frags = Math.max(1, Math.round((1 + Math.random() * 2) * power * 0.7));
+    state.blueprintFragments += frags;
+    rewardText.push(`+${frags} fragments`);
+  }
+  if (Math.random() < 0.45) {
+    const boost = { kind: "prod", value: 0.22 * power * 0.4, until: Date.now() + 30000 };
+    state.activeBoosts.push(boost);
+    rewardText.push("30s production surge");
+  }
+  showRewardPopup(`Chest opened: ${rewardText.join(" • ")}`);
+  toast(`Chest rewards: ${rewardText.join(", ")}`);
+  closeModal();
   renderAll();
 }
 
@@ -1083,6 +1174,92 @@ function renderAll() {
   renderContracts();
   renderSkills();
   renderBlueprints();
+  renderRewardHub();
+}
+
+function renderRewardHub() {
+  if (!el.openChestBtn || !el.chestCountLabel || !el.activeBoostList || !el.milestoneList || !el.claimList) return;
+  const totalChests = chestRarities.reduce((sum, r) => sum + (state.chests[r] || 0), 0);
+  el.chestCountLabel.textContent = totalChests ? `${totalChests} chest${totalChests > 1 ? "s" : ""}` : "No chests";
+  el.openChestBtn.disabled = totalChests === 0;
+
+  const now = Date.now();
+  const boosts = (state.activeBoosts || [])
+    .filter((b) => b.until > now)
+    .sort((a, b) => a.until - b.until);
+  el.activeBoostList.innerHTML = boosts.length
+    ? boosts.map((b) => `<div class="row">
+      <div class="row-head"><strong>${boostLabel(b.kind)}</strong><span>${Math.max(0, Math.ceil((b.value || 0) * 100))}%</span></div>
+      <div class="row-meta"><span>Temporary bonus active</span><span>${formatCountdown(b.until - now)}</span></div>
+    </div>`).join("")
+    : `<div class="row"><div class="row-head"><strong>Active Boosts</strong><span>None</span></div><div class="row-meta"><span>Open chests or claim events to gain temporary boosts.</span><span></span></div></div>`;
+
+  const milestones = milestoneDefs.map((m) => {
+    const p = Math.min(1, m.progress());
+    const complete = p >= 1;
+    const claimed = state.claimedMilestones.includes(m.id);
+    return { ...m, p, complete, claimed };
+  });
+  el.milestoneList.innerHTML = milestones.map((m) => {
+    const rewardText = Object.entries(m.reward).map(([k, v]) => `${k}:${typeof v === "number" ? fmt(v) : v}`).join(" • ");
+    return `<div class="row ${m.complete && !m.claimed ? "affordable" : ""}">
+      <div class="row-head"><strong>${m.tier}: ${m.label}</strong><span>${Math.floor(m.p * 100)}%</span></div>
+      <div class="mod-progress"><span style="width:${Math.floor(m.p * 100)}%"></span></div>
+      <div class="row-meta"><span>${rewardText}</span><span>${m.claimed ? "Claimed" : (m.complete ? "Ready" : "In progress")}</span></div>
+      ${m.complete && !m.claimed ? `<button class="action-btn" data-claim-milestone="${m.id}">Claim</button>` : ""}
+    </div>`;
+  }).join("");
+
+  el.claimList.innerHTML = state.pendingClaims.map((c) => `<div class="row affordable"><div class="row-head"><strong>${c.title}</strong><span>Claimable</span></div><div class="row-meta"><span>${c.desc}</span><span></span></div><button class="action-btn claim-btn" data-claim-pending="${c.id}">Claim Reward</button></div>`).join("");
+  el.milestoneList.querySelectorAll("[data-claim-milestone]").forEach((btn) => btn.addEventListener("click", () => claimMilestone(btn.dataset.claimMilestone)));
+  el.claimList.querySelectorAll("[data-claim-pending]").forEach((btn) => btn.addEventListener("click", () => claimPending(btn.dataset.claimPending)));
+}
+
+function boostLabel(kind) {
+  if (kind === "prod") return "Production Boost";
+  if (kind === "cash") return "Cash Boost";
+  return "General Boost";
+}
+
+function formatCountdown(msLeft) {
+  const totalSeconds = Math.max(0, Math.ceil(msLeft / 1000));
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+}
+
+function claimMilestone(id) {
+  if (state.claimedMilestones.includes(id)) return;
+  const m = milestoneDefs.find((x) => x.id === id);
+  if (!m || m.progress() < 1) return;
+  state.claimedMilestones.push(id);
+  applyRewardPayload(m.reward);
+  showRewardPopup(`Milestone complete: ${m.label}`);
+  renderAll();
+}
+
+function claimPending(id) {
+  const claim = state.pendingClaims.find((x) => x.id === id);
+  if (!claim) return;
+  applyRewardPayload(claim.reward);
+  state.pendingClaims = state.pendingClaims.filter((x) => x.id !== id);
+  showRewardPopup(`Claimed: ${claim.title}`);
+  renderAll();
+}
+
+function applyRewardPayload(reward = {}) {
+  if (reward.cash) state.resources.cash += reward.cash;
+  if (reward.research) state.resources.research += reward.research;
+  if (reward.tokens) state.resources.tokens += reward.tokens;
+  if (reward.fragments) state.blueprintFragments += reward.fragments;
+  if (reward.chest) state.chests[reward.chest] = (state.chests[reward.chest] || 0) + 1;
+  if (reward.boost) {
+    state.activeBoosts.push({
+      kind: reward.boost.kind,
+      value: reward.boost.value,
+      until: Date.now() + reward.boost.duration
+    });
+  }
 }
 
 function renderHUD() {
@@ -1189,9 +1366,10 @@ function renderContracts() {
     const statusLabel = c.status === "completed" ? "Completed" : "Active";
     const timerLabel = c.status === "completed" ? "Timer stopped" : `${Math.ceil(c.remaining)}s`;
     el.activeContract.innerHTML = `
-      <div class="row contract-card state-${c.status}">
+      <div class="row contract-card state-${c.status} ${pct >= 85 ? "best-option" : ""}">
         <div class="row-head"><strong>${c.name}</strong><span>${statusLabel}</span></div>
         <div class="row-meta"><span>Progress ${fmt(c.progress)} / ${c.targetWindows} windows</span><span>${pct.toFixed(0)}%</span></div>
+        <div class="mod-progress"><span style="width:${pct.toFixed(0)}%"></span></div>
         <div class="row-meta"><span>${timerLabel}</span><span>Fragments +${c.fragmentReward || 0}</span></div>
         ${c.status === "completed" ? `<button class="action-btn claim-btn" data-claim-contract="active">Claim Reward</button>` : ""}
       </div>`;
@@ -1592,6 +1770,10 @@ function normalizeState(incoming) {
   if (next.metaUpgrades?.offlineLab) next.metaUpgrades.offlineLogistics += next.metaUpgrades.offlineLab;
   if (next.metaUpgrades?.blueprintIntel) next.metaUpgrades.fragmentMagnet += next.metaUpgrades.blueprintIntel;
   next.blueprints = (next.blueprints || []).filter((id) => blueprintDefs.some((bp) => bp.id === id));
+  if (!next.chests) next.chests = { common: 0, rare: 0, epic: 0, legendary: 0 };
+  if (!Array.isArray(next.claimedMilestones)) next.claimedMilestones = [];
+  if (!Array.isArray(next.pendingClaims)) next.pendingClaims = [];
+  if (!Array.isArray(next.activeBoosts)) next.activeBoosts = [];
   if (!Array.isArray(next.contractBoard)) next.contractBoard = [];
   if (typeof next.contractRefreshAt !== "number") next.contractRefreshAt = 0;
   next.skills = (next.skills || []).filter((id) => skillDefs.some((s) => s.id === id));
