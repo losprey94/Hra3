@@ -953,6 +953,10 @@ body.modernize-flash::after {
   border-left: 3px solid #ff8b8b;
 }
 
+.contract-card .row-head span {
+  font-weight: 600;
+}
+
 .blueprint-card.locked {
   opacity: 0.88;
 }
@@ -960,6 +964,23 @@ body.modernize-flash::after {
 .blueprint-card.unlocked {
   border-color: #7ec8ff;
   box-shadow: 0 0 0 1px rgba(126, 200, 255, 0.32);
+}
+
+.blueprint-card.rarity-common {
+  border-left: 3px solid #8db7df;
+}
+
+.blueprint-card.rarity-rare {
+  border-left: 3px solid #67b7ff;
+}
+
+.blueprint-card.rarity-epic {
+  border-left: 3px solid #c089ff;
+}
+
+.blueprint-card.rarity-legendary {
+  border-left: 3px solid #ffd06c;
+  box-shadow: 0 0 0 1px rgba(255, 208, 108, 0.26);
 }
 
 .row-head {
