@@ -518,7 +518,7 @@ function gameTick() {
     if (fpsFrameSkip === 1) return;
   }
   try {
-    if (now - lastStateValidationAt > 1500) {
+   if (now - lastStateValidationAt > 1500) {
       validateGameState("tick");
       lastStateValidationAt = now;
     }
