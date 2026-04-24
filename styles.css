@@ -1706,6 +1706,15 @@ h3, h4 {
   color: var(--text-hi);
 }
 
+.panel-head {
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.panel-head h3 {
+  margin: 0;
+}
+
 .row-meta {
   color: var(--text-mid);
 }
@@ -1741,6 +1750,47 @@ h3, h4 {
 
 .action-btn:active {
   transform: translateY(1px) scale(0.99);
+}
+
+.ghost-btn {
+  border-color: rgba(100, 170, 228, 0.38);
+  background: linear-gradient(180deg, rgba(31, 60, 93, 0.86), rgba(23, 45, 73, 0.9));
+  box-shadow: 0 5px 10px rgba(5, 12, 25, 0.35);
+}
+
+.bulk-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  border: 1px solid rgba(87, 154, 223, 0.42);
+  background: rgba(8, 22, 42, 0.72);
+}
+
+.bulk-btn {
+  border: 0;
+  min-width: 38px;
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 7px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #99bbde;
+  background: transparent;
+  transition: background 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.bulk-btn.active {
+  color: #051a2d;
+  background: linear-gradient(180deg, #83ecff, #55cfff);
+  box-shadow: 0 0 0 1px rgba(132, 227, 255, 0.55), 0 0 14px rgba(92, 210, 255, 0.35);
+}
+
+.bulk-btn:not(.active):hover,
+.bulk-btn:not(.active):focus-visible {
+  color: #d8edff;
+  background: rgba(74, 126, 183, 0.35);
 }
 
 .claim-btn,
@@ -1827,4 +1877,16 @@ h3, h4 {
   border: 1px solid rgba(119, 198, 255, 0.54);
   background: linear-gradient(160deg, rgba(20, 43, 74, 0.95), rgba(12, 29, 53, 0.95));
   box-shadow: 0 12px 20px rgba(2, 9, 20, 0.48);
+}
+
+@media (max-width: 640px) {
+  .panel-head {
+    gap: 8px;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .bulk-controls {
+    width: fit-content;
+  }
 }

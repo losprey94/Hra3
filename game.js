@@ -258,8 +258,6 @@ const el = {
   wpsLabel: document.getElementById("wpsLabel"),
   cashFocus: document.getElementById("cashFocus"),
   goalLabel: document.getElementById("goalLabel"),
-  recommendedText: document.getElementById("recommendedText"),
-  recommendedBtn: document.getElementById("recommendedBtn"),
   lastSavedLabel: document.getElementById("lastSavedLabel"),
   incomeTicker: document.getElementById("incomeTicker"),
   factoryView: document.getElementById("factoryView"),
@@ -511,7 +509,6 @@ function bindEvents() {
   document.getElementById("resetBtn")?.addEventListener("click", hardReset);
   el.openChestBtn?.addEventListener("click", openChestPanel);
   el.claimAllBtn?.addEventListener("click", claimAllRewards);
-  el.recommendedBtn?.addEventListener("click", triggerRecommendedAction);
   document.querySelectorAll("[data-bulk]").forEach((btn) => {
     btn.addEventListener("click", () => {
       lineBuyMode = btn.dataset.bulk;
@@ -1843,9 +1840,6 @@ function renderHUD() {
     if (el.modifierBanner) el.modifierBanner.style.display = "none";
   }
 
-  const rec = getRecommendedAction();
-  if (el.recommendedText) el.recommendedText.textContent = `${rec.label} — ${rec.reason}`;
-  if (el.recommendedBtn) el.recommendedBtn.textContent = rec.label.length > 24 ? "Do Recommended Action" : rec.label;
   if (el.lastSavedLabel) {
     const sec = Math.max(0, Math.floor((Date.now() - (state.savedAt || Date.now())) / 1000));
     el.lastSavedLabel.textContent = `Last saved: ${sec < 60 ? `${sec}s ago` : `${Math.floor(sec / 60)}m ago`}`;
@@ -1873,41 +1867,6 @@ function updateTabBadges() {
   });
 }
 
-function getRecommendedAction() {
-  if (state.contract?.status === "completed") {
-    return { label: "Claim completed contract", reason: "Reward is ready now.", run: () => claimContractReward() };
-  }
-  const readyMilestone = milestoneDefs.find((m) => !state.claimedMilestones.includes(m.id) && m.progress() >= 1);
-  if (readyMilestone) return { label: "Claim milestone reward", reason: readyMilestone.label, run: () => claimMilestone(readyMilestone.id) };
-  if (state.pendingClaims.length) return { label: "Claim pending rewards", reason: `${state.pendingClaims.length} rewards ready`, run: claimAllRewards };
-  if (state.skillPoints > 0) return { label: "Spend skill points", reason: `${state.skillPoints} SP available`, run: () => setActiveTab("skills") };
-  if (!state.contract) {
-    const best = state.contractBoard
-      .filter((c) => state.resources.reputation >= c.minRep && (!c.requiredLine || state.lines[c.requiredLine.id].level >= c.requiredLine.level))
-      .sort((a, b) => (b.rewards.cash / b.duration) - (a.rewards.cash / a.duration))[0];
-    if (best) return { label: `Start ${best.specialType || best.type} contract`, reason: "Best cash efficiency", run: () => startContract(best.id) };
-  }
-  const bestLine = lineDefs
-    .filter((line) => isLineUnlocked(line))
-    .map((line) => ({ line, bulk: calcBulkLinePurchase(line, lineBuyMode), score: (line.baseRate || 0.01) / Math.max(1, calcBulkLinePurchase(line, lineBuyMode).totalCost || lineUpgradeCost(line)) }))
-    .filter((x) => x.bulk.qty > 0)
-    .sort((a, b) => b.score - a.score)[0];
-  if (bestLine) return { label: `Upgrade ${bestLine.line.name}`, reason: "Best income impact now", run: () => buyLine(bestLine.line.id, "mode") };
-  const analysis = calcModernizationAnalysis();
-  if (analysis.ready) return { label: "Modernize run", reason: `${analysis.reward} tokens ready`, run: () => openModernizationHub() };
-  if (Date.now() >= state.rush.cooldownUntil && Date.now() > state.rush.activeUntil) return { label: "Activate Boost", reason: "Push toward next unlock", run: activateRush };
-  return { label: "Improve production", reason: "Increase cash/sec for faster progress", run: () => setActiveTab("factory") };
-}
-
-function triggerRecommendedAction() {
-  getRecommendedAction().run?.();
-}
-
-function setActiveTab(tab) {
-  const btn = document.querySelector(`.tab[data-tab="${tab}"]`);
-  btn?.click();
-}
-
 function getMilestoneGoal() {
   if (state.windowsMade < 1000) return "Mid: 1K windows";
   if (state.completedContracts < 10) return `Mid: ${10 - state.completedContracts} contracts to milestone`;
@@ -1931,7 +1890,7 @@ function renderFactory() {
     const affordable = unlocked && bulk.qty > 0;
     const milestoneCount = lineMilestonesReached(lv);
     const milestoneLabel = milestoneCount ? `${milestoneCount}/${lineMilestones.length} milestones` : "No milestone";
-    const modeLabel = lineBuyMode === "max" ? `Buy Max (${bulk.qty})` : `Buy ${bulk.qty || lineBuyMode}`;
+    const modeLabel = lineBuyMode === "max" ? `Buy Max ${bulk.qty > 0 ? `(${bulk.qty})` : ""}` : `Buy x${lineBuyMode}`;
     return `<div class="row ${affordable ? "affordable" : ""}"><div class="row-head"><strong>${line.icon} ${line.name}</strong><span>Lv ${lv}</span></div><div class="row-meta"><span>${active ? `${fmt(line.baseRate * lv * (1 + Math.sqrt(lv) * 0.03))} w/s raw` : "Locked"}</span><span>Cost $${fmt(cost)}</span></div><div class="row-meta"><span>${reqText || "Unlocked"}</span><span>${bulk.qty > 0 ? affordText : "Requires more income"}</span></div><div class="row-meta"><span>${milestoneLabel}</span><span>Plant synergy +${synergyPct}%</span></div><button class="action-btn" data-line="${line.id}" ${(!unlocked || !affordable) ? "disabled" : ""}>${modeLabel}</button></div>`;
   }).join("");
 
