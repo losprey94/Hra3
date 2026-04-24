@@ -3,11 +3,11 @@ const SAVE_KEY = "window_factory_tycoon_v1";
 const RESOURCES = ["cash", "research", "reputation", "parts", "tokens"];
 
 const lineDefs = [
-  { id: "cutter", name: "Frame Cutter", baseCost: 50, baseRate: 0.2, icon: "🪚", unlockReq: null },
-  { id: "furnace", name: "Glass Furnace", baseCost: 300, baseRate: 0.29, icon: "🔥", unlockReq: { line: "cutter", level: 9 } },
-  { id: "assembler", name: "Assembly Robot", baseCost: 1300, baseRate: 0.39, icon: "🤖", unlockReq: { line: "furnace", level: 8 } },
-  { id: "qc", name: "Quality Scanner", baseCost: 5600, baseRate: 0.52, icon: "🔍", unlockReq: { line: "assembler", level: 7 } },
-  { id: "pack", name: "Packaging Bay", baseCost: 26000, baseRate: 0.68, icon: "📦", unlockReq: { line: "qc", level: 6 } }
+  { id: "cutter", name: "Frame Cutter", baseCost: 50, baseRate: 0.2, icon: "▦", unlockReq: null },
+  { id: "furnace", name: "Glass Furnace", baseCost: 300, baseRate: 0.29, icon: "◍", unlockReq: { line: "cutter", level: 9 } },
+  { id: "assembler", name: "Assembly Robot", baseCost: 1300, baseRate: 0.39, icon: "◈", unlockReq: { line: "furnace", level: 8 } },
+  { id: "qc", name: "Quality Scanner", baseCost: 5600, baseRate: 0.52, icon: "◎", unlockReq: { line: "assembler", level: 7 } },
+  { id: "pack", name: "Packaging Bay", baseCost: 26000, baseRate: 0.68, icon: "⬣", unlockReq: { line: "qc", level: 6 } }
 ];
 
 const lineMilestones = [5, 10, 20, 50];
@@ -568,19 +568,23 @@ function gameTick() {
       const rem = Math.ceil((state.rush.cooldownUntil - now) / 1000);
       el.rushBtn.disabled = true;
       el.rushBtn.classList.remove("ready");
+      el.rushBtn.classList.remove("ready-pulse");
       el.rushBtn.textContent = `Recharging (${rem}s)`;
       el.rushStatus.textContent = `Rush cooldown: ${rem}s`;
     } else if (now <= state.rush.activeUntil) {
       const rem = Math.ceil((state.rush.activeUntil - now) / 1000);
       el.rushBtn.disabled = true;
       el.rushBtn.classList.remove("ready");
+      el.rushBtn.classList.remove("ready-pulse");
       el.rushBtn.textContent = `Boosting (${rem}s)`;
       el.rushStatus.textContent = `Rush active (${rem}s).`;
     } else {
       el.rushBtn.disabled = false;
       el.rushBtn.classList.add("ready");
+      el.rushBtn.classList.add("ready-pulse");
       el.rushBtn.textContent = "Boost Production";
-      el.rushStatus.textContent = "Tap to overclock lines and push your next upgrade.";
+      const dur = Math.round((5000 + state.modifiers.rushDuration * 1000) / 1000);
+      el.rushStatus.textContent = `${dur}s overclock • 32s cooldown`;
     }
 
     if (state.settings.autoBoost && now >= state.rush.cooldownUntil && now > state.rush.activeUntil) {
@@ -1323,20 +1327,20 @@ function estimateRevenueForTargetTokens(targetTokens) {
 
 function getModernizationUpgradeDefs() {
   return [
-    { key: "startCash", category: "Early Game Boost", uiCategory: "Economy", icon: "💰", name: "Kickstart Treasury", desc: "+$55 starting cash per level", baseCost: 1, costMul: 1.45, max: 15, effect: (lv) => `$${fmt(lv * 55)}` },
-    { key: "startupMomentum", category: "Early Game Boost", uiCategory: "Production", icon: "⚡", name: "Startup Momentum", desc: "+1.8% early-run production per level", baseCost: 1, costMul: 1.6, max: 12, effect: (lv) => `+${(lv * 1.8).toFixed(1)}% early boost` },
-    { key: "lineCalibration", category: "Production Efficiency", uiCategory: "Production", icon: "🏭", name: "Line Calibration", desc: "+1.5% production speed per level", baseCost: 2, costMul: 1.58, max: 20, effect: (lv) => `+${(lv * 1.5).toFixed(1)}% speed` },
-    { key: "costEngineering", category: "Production Efficiency", uiCategory: "Economy", icon: "🧮", name: "Cost Engineering", desc: "-1% line upgrade cost per level", baseCost: 2, costMul: 1.65, max: 20, effect: (lv) => `-${Math.min(20, lv)}% line cost` },
-    { key: "contractNegotiation", category: "Contracts", uiCategory: "Contracts", icon: "📜", name: "Negotiation Office", desc: "+3% contract reward multiplier per level", baseCost: 2, costMul: 1.62, max: 15, effect: (lv) => `+${(lv * 3).toFixed(0)}% rewards` },
-    { key: "rareContractSignal", category: "Contracts", uiCategory: "Contracts", icon: "🎯", name: "Rare Contract Signal", desc: "Small chance for +1 extra fragment on claims", baseCost: 3, costMul: 1.7, max: 12, effect: (lv) => `+${(lv * 1.2).toFixed(1)}% bonus frag chance` },
-    { key: "fragmentMagnet", category: "Blueprint System", uiCategory: "Blueprints", icon: "🧩", name: "Fragment Magnet", desc: "+5% fragment gains per level", baseCost: 2, costMul: 1.63, max: 18, effect: (lv) => `+${(lv * 5).toFixed(0)}% fragments` },
-    { key: "fragmentRefining", category: "Blueprint System", uiCategory: "Blueprints", icon: "🔬", name: "Fragment Refinery", desc: "+3% fragment gains per level", baseCost: 3, costMul: 1.72, max: 15, effect: (lv) => `+${(lv * 3).toFixed(0)}% fragments` },
-    { key: "offlineLogistics", category: "Offline Progress", uiCategory: "Offline", icon: "🌙", name: "Offline Logistics", desc: "+10% offline earnings per level", baseCost: 2, costMul: 1.58, max: 15, effect: (lv) => `+${(lv * 10).toFixed(0)}% offline` },
-    { key: "offlineCap", category: "Offline Progress", uiCategory: "Offline", icon: "⏱️", name: "Offline Capacity", desc: "+5 min offline cap per level", baseCost: 1, costMul: 1.52, max: 18, effect: (lv) => `+${lv * 5} min cap` },
-    { key: "strategyProd", category: "Specialization", uiCategory: "Production", icon: "🏗️", name: "Production Doctrine", desc: "Increases production specialization score and line milestone power", baseCost: 4, costMul: 1.8, max: 8, effect: (lv) => `Score +${lv} • milestones +${(lv * 3).toFixed(0)}%` },
-    { key: "strategyContracts", category: "Specialization", uiCategory: "Contracts", icon: "🧾", name: "Broker Doctrine", desc: "Increases contract specialization score and special contract chance", baseCost: 4, costMul: 1.82, max: 8, effect: (lv) => `Score +${lv} • special roll +${(lv * 1.5).toFixed(1)}%` },
-    { key: "strategyBlueprints", category: "Specialization", uiCategory: "Blueprints", icon: "🧠", name: "Innovation Doctrine", desc: "Increases blueprint specialization score and weakens economy pressure", baseCost: 4, costMul: 1.82, max: 8, effect: (lv) => `Score +${lv} • soft-cap resist +${(lv * 1).toFixed(0)}%` },
-    { key: "autoClaim", category: "Quality of Life", uiCategory: "Contracts", icon: "🤖", name: "Auto Claim Contracts", desc: "Automatically claims completed contracts", baseCost: 8, costMul: 2.2, max: 1, effect: (lv) => (lv > 0 ? "Enabled" : "Disabled") }
+    { key: "startCash", category: "Early Game Boost", uiCategory: "Economy", icon: "◈", name: "Kickstart Treasury", desc: "+$55 starting cash per level", baseCost: 1, costMul: 1.45, max: 15, effect: (lv) => `$${fmt(lv * 55)}` },
+    { key: "startupMomentum", category: "Early Game Boost", uiCategory: "Production", icon: "⟡", name: "Startup Momentum", desc: "+1.8% early-run production per level", baseCost: 1, costMul: 1.6, max: 12, effect: (lv) => `+${(lv * 1.8).toFixed(1)}% early boost` },
+    { key: "lineCalibration", category: "Production Efficiency", uiCategory: "Production", icon: "▣", name: "Line Calibration", desc: "+1.5% production speed per level", baseCost: 2, costMul: 1.58, max: 20, effect: (lv) => `+${(lv * 1.5).toFixed(1)}% speed` },
+    { key: "costEngineering", category: "Production Efficiency", uiCategory: "Economy", icon: "◧", name: "Cost Engineering", desc: "-1% line upgrade cost per level", baseCost: 2, costMul: 1.65, max: 20, effect: (lv) => `-${Math.min(20, lv)}% line cost` },
+    { key: "contractNegotiation", category: "Contracts", uiCategory: "Contracts", icon: "▤", name: "Negotiation Office", desc: "+3% contract reward multiplier per level", baseCost: 2, costMul: 1.62, max: 15, effect: (lv) => `+${(lv * 3).toFixed(0)}% rewards` },
+    { key: "rareContractSignal", category: "Contracts", uiCategory: "Contracts", icon: "◎", name: "Rare Contract Signal", desc: "Small chance for +1 extra fragment on claims", baseCost: 3, costMul: 1.7, max: 12, effect: (lv) => `+${(lv * 1.2).toFixed(1)}% bonus frag chance` },
+    { key: "fragmentMagnet", category: "Blueprint System", uiCategory: "Blueprints", icon: "◇", name: "Fragment Magnet", desc: "+5% fragment gains per level", baseCost: 2, costMul: 1.63, max: 18, effect: (lv) => `+${(lv * 5).toFixed(0)}% fragments` },
+    { key: "fragmentRefining", category: "Blueprint System", uiCategory: "Blueprints", icon: "⬡", name: "Fragment Refinery", desc: "+3% fragment gains per level", baseCost: 3, costMul: 1.72, max: 15, effect: (lv) => `+${(lv * 3).toFixed(0)}% fragments` },
+    { key: "offlineLogistics", category: "Offline Progress", uiCategory: "Offline", icon: "◔", name: "Offline Logistics", desc: "+10% offline earnings per level", baseCost: 2, costMul: 1.58, max: 15, effect: (lv) => `+${(lv * 10).toFixed(0)}% offline` },
+    { key: "offlineCap", category: "Offline Progress", uiCategory: "Offline", icon: "◴", name: "Offline Capacity", desc: "+5 min offline cap per level", baseCost: 1, costMul: 1.52, max: 18, effect: (lv) => `+${lv * 5} min cap` },
+    { key: "strategyProd", category: "Specialization", uiCategory: "Production", icon: "◫", name: "Production Doctrine", desc: "Increases production specialization score and line milestone power", baseCost: 4, costMul: 1.8, max: 8, effect: (lv) => `Score +${lv} • milestones +${(lv * 3).toFixed(0)}%` },
+    { key: "strategyContracts", category: "Specialization", uiCategory: "Contracts", icon: "◍", name: "Broker Doctrine", desc: "Increases contract specialization score and special contract chance", baseCost: 4, costMul: 1.82, max: 8, effect: (lv) => `Score +${lv} • special roll +${(lv * 1.5).toFixed(1)}%` },
+    { key: "strategyBlueprints", category: "Specialization", uiCategory: "Blueprints", icon: "◬", name: "Innovation Doctrine", desc: "Increases blueprint specialization score and weakens economy pressure", baseCost: 4, costMul: 1.82, max: 8, effect: (lv) => `Score +${lv} • soft-cap resist +${(lv * 1).toFixed(0)}%` },
+    { key: "autoClaim", category: "Quality of Life", uiCategory: "Contracts", icon: "◌", name: "Auto Claim Contracts", desc: "Automatically claims completed contracts", baseCost: 8, costMul: 2.2, max: 1, effect: (lv) => (lv > 0 ? "Enabled" : "Disabled") }
   ];
 }
 
@@ -1459,11 +1463,11 @@ function openModernizationHub() {
       const currentEffect = u.effect ? u.effect(lvl) : `Lv ${lvl}`;
       const nextEffect = u.effect ? u.effect(Math.min(u.max, lvl + 1)) : `Lv ${lvl + 1}`;
       return `<div class="mod-card ${affordable && !maxed ? "affordable" : ""}" data-upgrade-card="${u.key}">
-        <div class="mod-card-head"><span class="mod-icon">${u.icon || "⚙️"}</span><div><strong>${u.name}</strong><small>${u.category}</small></div><span>Lv ${lvl}/${u.max}</span></div>
+        <div class="mod-card-head"><span class="mod-icon">${u.icon || "◍"}</span><div><strong>${u.name}</strong><small>${u.category}</small></div><span>Lv ${lvl}/${u.max}</span></div>
         <p>${u.desc}</p>
         <div class="row-meta"><span>Current: ${currentEffect}</span><span>${maxed ? "MAXED" : `Next: ${nextEffect}`}</span></div>
         <div class="mod-progress"><span style="width:${progressPct}%"></span></div>
-        <div class="row-meta"><span>${maxed ? "No further cost" : `Cost ${cost} 🏅`}</span><span>${maxed ? "Completed" : (affordable ? "Affordable now" : `Need ${missing} more`)}</span></div>
+        <div class="row-meta"><span>${maxed ? "No further cost" : `Cost ${cost} TK`}</span><span>${maxed ? "Completed" : (affordable ? "Affordable now" : `Need ${missing} more`)}</span></div>
         ${maxed ? "" : `<button class="action-btn" data-meta="${u.key}" ${disabled}>Invest</button>`}
       </div>`;
     }).join("");
@@ -1480,7 +1484,7 @@ function openModernizationHub() {
     <div class="modernization-header">
       <h3>Factory Modernization</h3>
       <p>Permanent upgrades that shape every future run.</p>
-      <div class="modernization-stats"><span>🏅 Tokens <strong id="modTokens">${fmt(state.resources.tokens)}</strong></span><span>Invested <strong>${investedTotal}</strong></span><span>Path <strong>${specialization}</strong></span><span>Tier 2 ATP <strong>${fmt(state.advancedTech.points)}</strong></span></div>
+      <div class="modernization-stats"><span>TK Tokens <strong id="modTokens">${fmt(state.resources.tokens)}</strong></span><span>Invested <strong>${investedTotal}</strong></span><span>Path <strong>${specialization}</strong></span><span>Tier 2 ATP <strong>${fmt(state.advancedTech.points)}</strong></span></div>
     </div>
     <div class="mod-tabs">${tabHtml}</div>
     <div class="row mod-preview">
@@ -1764,7 +1768,26 @@ function renderHUD() {
     if (el.modifierBanner) el.modifierBanner.style.display = "none";
   }
 
+  updateTabBadges();
   updateMachineActivity();
+}
+
+function updateTabBadges() {
+  const rewardsReady = state.pendingClaims.length + milestoneDefs.filter((m) => !state.claimedMilestones.includes(m.id) && m.progress() >= 1).length;
+  const skillsReady = Math.max(0, Math.floor(state.skillPoints));
+  const contractReady = state.contract?.status === "completed" ? 1 : 0;
+  const map = { home: rewardsReady, skills: skillsReady, contracts: contractReady };
+  document.querySelectorAll(".bottom-nav .tab").forEach((tab) => {
+    const key = tab.dataset.tab;
+    const value = map[key] || 0;
+    if (value > 0) {
+      tab.setAttribute("data-badge", value > 99 ? "99+" : `${value}`);
+      tab.classList.add("has-badge");
+    } else {
+      tab.removeAttribute("data-badge");
+      tab.classList.remove("has-badge");
+    }
+  });
 }
 
 function getMilestoneGoal() {
@@ -1870,7 +1893,7 @@ function renderContracts() {
 function renderSkills() {
   const grouped = [...new Set(skillDefs.map((s) => s.branch))];
   const xpNeed = skillXpToNext(state.skillLevel);
-  const header = `<div class="row"><div class="row-head"><strong>Skill Points</strong><span>${state.skillPoints}</span></div><div class="row-meta"><span>Level ${state.skillLevel}</span><span>${fmt(state.skillXp)} / ${xpNeed} XP</span></div><div class="row-meta"><span>Build Identity</span><span>${getBuildIdentity()}</span></div><button class="action-btn" id="respecSkillsBtn">Respec Tree (2🏅 + 1% run cash)</button></div>`;
+  const header = `<div class="row"><div class="row-head"><strong>Skill Points</strong><span>${state.skillPoints}</span></div><div class="row-meta"><span>Level ${state.skillLevel}</span><span>${fmt(state.skillXp)} / ${xpNeed} XP</span></div><div class="row-meta"><span>Build Identity</span><span>${getBuildIdentity()}</span></div><button class="action-btn" id="respecSkillsBtn">Respec Tree (2 TK + 1% run cash)</button></div>`;
   const body = grouped.map((b) => {
     const branchSkills = skillDefs.filter((s) => s.branch === b);
     const owned = branchSkills.filter((s) => state.skills.includes(s.id)).length;
@@ -1921,11 +1944,11 @@ function renderBlueprints() {
 
 function bootstrapFactoryVisual() {
   const machinePos = {
-    cutter: { x: 16, y: 134, stage: "Frame Cut", icon: "🪚" },
-    furnace: { x: 150, y: 48, stage: "Glass Forge", icon: "🔥" },
-    assembler: { x: 150, y: 140, stage: "Panel Fit", icon: "🤖" },
-    qc: { x: 286, y: 48, stage: "QC Scan", icon: "🔍" },
-    pack: { x: 286, y: 140, stage: "Pack Out", icon: "📦" }
+    cutter: { x: 16, y: 134, stage: "Frame Cut", icon: "▦" },
+    furnace: { x: 150, y: 48, stage: "Glass Forge", icon: "◍" },
+    assembler: { x: 150, y: 140, stage: "Panel Fit", icon: "◈" },
+    qc: { x: 286, y: 48, stage: "QC Scan", icon: "◎" },
+    pack: { x: 286, y: 140, stage: "Pack Out", icon: "⬣" }
   };
 
   const lanes = [{ y: 102, text: "Production grid" }];
