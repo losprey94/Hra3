@@ -215,7 +215,10 @@ const defaultState = () => ({
     soundEnabled: false,
     soundVolume: 60,
     lowPerf: false,
-    fpsFriendly: false
+    fpsFriendly: false,
+    numberFormat: "short",
+    confirmMajorActions: true,
+    haptics: false
   }
 });
 
@@ -242,6 +245,7 @@ const el = {
   skillBranches: document.getElementById("skillBranches"),
   blueprintList: document.getElementById("blueprintList"),
   openChestBtn: document.getElementById("openChestBtn"),
+  claimAllBtn: document.getElementById("claimAllBtn"),
   chestCountLabel: document.getElementById("chestCountLabel"),
   activeBoostList: document.getElementById("activeBoostList"),
   milestoneList: document.getElementById("milestoneList"),
@@ -254,6 +258,9 @@ const el = {
   wpsLabel: document.getElementById("wpsLabel"),
   cashFocus: document.getElementById("cashFocus"),
   goalLabel: document.getElementById("goalLabel"),
+  recommendedText: document.getElementById("recommendedText"),
+  recommendedBtn: document.getElementById("recommendedBtn"),
+  lastSavedLabel: document.getElementById("lastSavedLabel"),
   incomeTicker: document.getElementById("incomeTicker"),
   factoryView: document.getElementById("factoryView"),
   energyWave: document.getElementById("energyWave"),
@@ -266,6 +273,8 @@ const el = {
   modalLayer: document.getElementById("modalLayer"),
   modifierBanner: document.getElementById("modifierBanner")
 };
+
+let lineBuyMode = "1";
 
 validateGameState("startup");
 validateConfig();
@@ -501,6 +510,15 @@ function bindEvents() {
   });
   document.getElementById("resetBtn")?.addEventListener("click", hardReset);
   el.openChestBtn?.addEventListener("click", openChestPanel);
+  el.claimAllBtn?.addEventListener("click", claimAllRewards);
+  el.recommendedBtn?.addEventListener("click", triggerRecommendedAction);
+  document.querySelectorAll("[data-bulk]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      lineBuyMode = btn.dataset.bulk;
+      document.querySelectorAll("[data-bulk]").forEach((b) => b.classList.toggle("active", b === btn));
+      renderFactory();
+    });
+  });
 
   el.modalLayer?.addEventListener("click", (e) => {
     if (e.target === el.modalLayer) closeModal();
@@ -759,6 +777,29 @@ function lineUpgradeCost(line) {
   return Math.ceil(line.baseCost * Math.pow(1.47, lv) * discount);
 }
 
+function lineUpgradeCostAtLevel(line, level) {
+  let discount = 1 - Math.min(0.18, state.modifiers.costDiscount);
+  discount *= 1 - Math.min(0.2, state.metaUpgrades.costEngineering * 0.01);
+  if (state.flags.bpFirstUpgradeDiscount && state.runState.firstUpgradeDiscountPending) discount *= 0.82;
+  if (state.flags.unionMomentum) discount *= 1.04;
+  return Math.ceil(line.baseCost * Math.pow(1.47, level) * discount);
+}
+
+function calcBulkLinePurchase(line, mode = "1") {
+  const current = state.lines[line.id].level;
+  let qty = 0;
+  let totalCost = 0;
+  const cash = state.resources.cash;
+  const cap = mode === "max" ? 999 : Number(mode);
+  for (let i = 0; i < cap; i += 1) {
+    const c = lineUpgradeCostAtLevel(line, current + i);
+    if (totalCost + c > cash) break;
+    totalCost += c;
+    qty += 1;
+  }
+  return { qty, totalCost };
+}
+
 function isLineUnlocked(line) {
   if (!line.unlockReq) return true;
   return state.lines[line.unlockReq.line].level >= line.unlockReq.level;
@@ -779,31 +820,35 @@ function timeToAffordLabel(seconds) {
   return "~1h+ to afford";
 }
 
-function buyLine(lineId) {
+function buyLine(lineId, qtyRequest = 1) {
   const def = lineDefs.find((x) => x.id === lineId);
   if (!def) return;
   if (!isLineUnlocked(def)) return;
-  const cost = lineUpgradeCost(def);
-  if (state.resources.cash < cost) return;
-  const prevLv = state.lines[lineId].level;
-  state.resources.cash -= cost;
-  state.lines[lineId].level += 1;
+  const mode = qtyRequest === "mode" ? lineBuyMode : `${qtyRequest}`;
+  const plan = calcBulkLinePurchase(def, mode);
+  if (plan.qty <= 0 || plan.totalCost <= 0) return;
+  if (mode === "max" && plan.qty >= 20 && state.settings.confirmMajorActions) {
+    if (!confirm(`Buy Max for ${def.name}? (${plan.qty} upgrades)`)) return;
+  }
+  const startLv = state.lines[lineId].level;
+  state.resources.cash -= plan.totalCost;
+  state.lines[lineId].level += plan.qty;
   if (state.flags.bpFirstUpgradeDiscount && state.runState.firstUpgradeDiscountPending) {
     state.runState.firstUpgradeDiscountPending = false;
     showRewardPopup("Blueprint bonus: first upgrade discount used");
   }
-  const nextLv = state.lines[lineId].level;
-  const newlyReached = lineMilestones.find((step) => prevLv < step && nextLv >= step);
-  if (newlyReached) {
-    const milestoneReward = 3 + lineMilestones.indexOf(newlyReached) * 2;
-    state.resources.research += milestoneReward;
-    state.resources.reputation += 0.8 + lineMilestones.indexOf(newlyReached) * 0.7;
-    showRewardPopup(`${def.name} milestone Lv ${newlyReached}`);
-    toast(`${def.name} milestone Lv ${newlyReached}! +${milestoneReward} research.`);
-    if (newlyReached >= 20) state.resources.parts += 2 + lineMilestones.indexOf(newlyReached);
+  for (const step of lineMilestones) {
+    if (startLv < step && state.lines[lineId].level >= step) {
+      const milestoneReward = 3 + lineMilestones.indexOf(step) * 2;
+      state.resources.research += milestoneReward;
+      state.resources.reputation += 0.8 + lineMilestones.indexOf(step) * 0.7;
+      showRewardPopup(`${def.name} milestone Lv ${step}`);
+      toast(`${def.name} milestone Lv ${step}! +${milestoneReward} research.`);
+      if (step >= 20) state.resources.parts += 2 + lineMilestones.indexOf(step);
+    }
   }
   flashMachine(lineId);
-  toast(`${def.name} upgraded to Lv ${nextLv}`);
+  toast(`${def.name} upgraded +${plan.qty} to Lv ${state.lines[lineId].level}`);
   validateGameState("buyLine");
   renderAll();
 }
@@ -1595,6 +1640,10 @@ function renderRewardHub() {
   el.chestCountLabel.textContent = totalChests ? `${totalChests} chest${totalChests > 1 ? "s" : ""}${readyClaims ? ` • ${readyClaims} ready` : ""}` : (readyClaims ? `${readyClaims} rewards ready` : "No chests");
   el.openChestBtn.disabled = totalChests === 0;
   el.openChestBtn.classList.toggle("ready-pulse", totalChests > 0);
+  if (el.claimAllBtn) {
+    el.claimAllBtn.disabled = readyClaims === 0;
+    el.claimAllBtn.classList.toggle("ready-pulse", readyClaims > 0);
+  }
 
   const now = Date.now();
   const boosts = (state.activeBoosts || [])
@@ -1658,6 +1707,32 @@ function claimPending(id) {
   applyRewardPayload(claim.reward);
   state.pendingClaims = state.pendingClaims.filter((x) => x.id !== id);
   showRewardPopup(`Claimed: ${claim.title}`);
+  renderAll();
+}
+
+function claimAllRewards() {
+  let claimed = 0;
+  let totalCash = 0;
+  state.pendingClaims.slice().forEach((c) => {
+    totalCash += c.reward?.cash || 0;
+    applyRewardPayload(c.reward);
+    claimed += 1;
+  });
+  state.pendingClaims = [];
+  milestoneDefs.forEach((m) => {
+    if (!state.claimedMilestones.includes(m.id) && m.progress() >= 1) {
+      state.claimedMilestones.push(m.id);
+      totalCash += m.reward?.cash || 0;
+      applyRewardPayload(m.reward);
+      claimed += 1;
+    }
+  });
+  if (!claimed) {
+    toast("No rewards ready to claim.");
+    return;
+  }
+  showRewardPopup(`Claimed ${claimed} rewards`);
+  toast(`Claimed ${claimed} rewards${totalCash ? ` (+$${fmt(totalCash)})` : ""}.`);
   renderAll();
 }
 
@@ -1768,6 +1843,14 @@ function renderHUD() {
     if (el.modifierBanner) el.modifierBanner.style.display = "none";
   }
 
+  const rec = getRecommendedAction();
+  if (el.recommendedText) el.recommendedText.textContent = `${rec.label} — ${rec.reason}`;
+  if (el.recommendedBtn) el.recommendedBtn.textContent = rec.label.length > 24 ? "Do Recommended Action" : rec.label;
+  if (el.lastSavedLabel) {
+    const sec = Math.max(0, Math.floor((Date.now() - (state.savedAt || Date.now())) / 1000));
+    el.lastSavedLabel.textContent = `Last saved: ${sec < 60 ? `${sec}s ago` : `${Math.floor(sec / 60)}m ago`}`;
+  }
+
   updateTabBadges();
   updateMachineActivity();
 }
@@ -1790,6 +1873,41 @@ function updateTabBadges() {
   });
 }
 
+function getRecommendedAction() {
+  if (state.contract?.status === "completed") {
+    return { label: "Claim completed contract", reason: "Reward is ready now.", run: () => claimContractReward() };
+  }
+  const readyMilestone = milestoneDefs.find((m) => !state.claimedMilestones.includes(m.id) && m.progress() >= 1);
+  if (readyMilestone) return { label: "Claim milestone reward", reason: readyMilestone.label, run: () => claimMilestone(readyMilestone.id) };
+  if (state.pendingClaims.length) return { label: "Claim pending rewards", reason: `${state.pendingClaims.length} rewards ready`, run: claimAllRewards };
+  if (state.skillPoints > 0) return { label: "Spend skill points", reason: `${state.skillPoints} SP available`, run: () => setActiveTab("skills") };
+  if (!state.contract) {
+    const best = state.contractBoard
+      .filter((c) => state.resources.reputation >= c.minRep && (!c.requiredLine || state.lines[c.requiredLine.id].level >= c.requiredLine.level))
+      .sort((a, b) => (b.rewards.cash / b.duration) - (a.rewards.cash / a.duration))[0];
+    if (best) return { label: `Start ${best.specialType || best.type} contract`, reason: "Best cash efficiency", run: () => startContract(best.id) };
+  }
+  const bestLine = lineDefs
+    .filter((line) => isLineUnlocked(line))
+    .map((line) => ({ line, bulk: calcBulkLinePurchase(line, lineBuyMode), score: (line.baseRate || 0.01) / Math.max(1, calcBulkLinePurchase(line, lineBuyMode).totalCost || lineUpgradeCost(line)) }))
+    .filter((x) => x.bulk.qty > 0)
+    .sort((a, b) => b.score - a.score)[0];
+  if (bestLine) return { label: `Upgrade ${bestLine.line.name}`, reason: "Best income impact now", run: () => buyLine(bestLine.line.id, "mode") };
+  const analysis = calcModernizationAnalysis();
+  if (analysis.ready) return { label: "Modernize run", reason: `${analysis.reward} tokens ready`, run: () => openModernizationHub() };
+  if (Date.now() >= state.rush.cooldownUntil && Date.now() > state.rush.activeUntil) return { label: "Activate Boost", reason: "Push toward next unlock", run: activateRush };
+  return { label: "Improve production", reason: "Increase cash/sec for faster progress", run: () => setActiveTab("factory") };
+}
+
+function triggerRecommendedAction() {
+  getRecommendedAction().run?.();
+}
+
+function setActiveTab(tab) {
+  const btn = document.querySelector(`.tab[data-tab="${tab}"]`);
+  btn?.click();
+}
+
 function getMilestoneGoal() {
   if (state.windowsMade < 1000) return "Mid: 1K windows";
   if (state.completedContracts < 10) return `Mid: ${10 - state.completedContracts} contracts to milestone`;
@@ -1802,19 +1920,22 @@ function renderFactory() {
   const synergyPct = Math.round(calcLineSynergyBonus() * 100);
   el.lineList.innerHTML = lineDefs.map((line) => {
     const lv = state.lines[line.id].level;
-    const cost = lineUpgradeCost(line);
+    const singleCost = lineUpgradeCost(line);
+    const bulk = calcBulkLinePurchase(line, lineBuyMode);
+    const cost = bulk.totalCost || singleCost;
     const active = lv > 0;
     const unlocked = isLineUnlocked(line);
     const eta = secondsToAfford(cost);
     const affordText = state.resources.cash >= cost ? "Ready" : timeToAffordLabel(eta).replace(" to afford", "");
     const reqText = unlocked || !line.unlockReq ? "" : `Needs ${lineDefs.find((x) => x.id === line.unlockReq.line).name} Lv ${line.unlockReq.level}`;
-    const affordable = unlocked && state.resources.cash >= cost;
+    const affordable = unlocked && bulk.qty > 0;
     const milestoneCount = lineMilestonesReached(lv);
     const milestoneLabel = milestoneCount ? `${milestoneCount}/${lineMilestones.length} milestones` : "No milestone";
-    return `<div class="row ${affordable ? "affordable" : ""}"><div class="row-head"><strong>${line.icon} ${line.name}</strong><span>Lv ${lv}</span></div><div class="row-meta"><span>${active ? `${fmt(line.baseRate * lv * (1 + Math.sqrt(lv) * 0.03))} w/s raw` : "Locked"}</span><span>Cost $${fmt(cost)}</span></div><div class="row-meta"><span>${reqText || "Unlocked"}</span><span>${affordText}</span></div><div class="row-meta"><span>${milestoneLabel}</span><span>Plant synergy +${synergyPct}%</span></div><button class="action-btn" data-line="${line.id}" ${(!unlocked || !affordable) ? "disabled" : ""}>${active ? "Upgrade" : "Activate"}</button></div>`;
+    const modeLabel = lineBuyMode === "max" ? `Buy Max (${bulk.qty})` : `Buy ${bulk.qty || lineBuyMode}`;
+    return `<div class="row ${affordable ? "affordable" : ""}"><div class="row-head"><strong>${line.icon} ${line.name}</strong><span>Lv ${lv}</span></div><div class="row-meta"><span>${active ? `${fmt(line.baseRate * lv * (1 + Math.sqrt(lv) * 0.03))} w/s raw` : "Locked"}</span><span>Cost $${fmt(cost)}</span></div><div class="row-meta"><span>${reqText || "Unlocked"}</span><span>${bulk.qty > 0 ? affordText : "Requires more income"}</span></div><div class="row-meta"><span>${milestoneLabel}</span><span>Plant synergy +${synergyPct}%</span></div><button class="action-btn" data-line="${line.id}" ${(!unlocked || !affordable) ? "disabled" : ""}>${modeLabel}</button></div>`;
   }).join("");
 
-  el.lineList.querySelectorAll("button[data-line]").forEach((btn) => btn.addEventListener("click", () => buyLine(btn.dataset.line)));
+  el.lineList.querySelectorAll("button[data-line]").forEach((btn) => btn.addEventListener("click", () => buyLine(btn.dataset.line, "mode")));
 }
 
 function renderDivisions() {
@@ -2135,6 +2256,8 @@ function openSettingsPanel() {
         ${settingToggle("showFloatingNumbers", "Floating numbers", s.showFloatingNumbers)}
         ${settingToggle("autoBoost", "Auto-trigger boost", s.autoBoost)}
         ${settingToggle("compactUi", "Compact UI mode", s.compactUi)}
+        ${settingToggle("confirmMajorActions", "Confirm major actions", s.confirmMajorActions)}
+        ${settingToggle("haptics", "Haptics", s.haptics)}
       </div>
       <div class="row"><strong>Visual</strong>
         ${settingToggle("animations", "Animations", s.animations)}
@@ -2148,6 +2271,7 @@ function openSettingsPanel() {
       <div class="row"><strong>Performance</strong>
         ${settingToggle("lowPerf", "Low performance mode", s.lowPerf)}
         ${settingToggle("fpsFriendly", "FPS-friendly mode", s.fpsFriendly)}
+        <label class="setting-row">Number format <select data-setting-select=\"numberFormat\"><option value="short" ${s.numberFormat === "short" ? "selected" : ""}>short</option><option value="detailed" ${s.numberFormat === "detailed" ? "selected" : ""}>detailed</option></select></label>
       </div>
       <div class="row"><strong>Data</strong>
         <button class="action-btn" data-data-action="export">Export Save</button>
@@ -2352,6 +2476,7 @@ function normalizeState(incoming) {
 
 function fmt(n) {
   if (!Number.isFinite(n)) return "0";
+  if (state?.settings?.numberFormat === "detailed") return n.toLocaleString(undefined, { maximumFractionDigits: n < 100 ? 2 : 1 });
   if (n >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
   if (n >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
   if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
