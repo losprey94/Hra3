@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Window Factory Tycoon</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app" class="app">
+    <header class="topbar">
+      <section class="resource-strip" id="resourceStrip"></section>
+      <button id="menuButton" class="menu-btn">☰</button>
+    </header>
+
+    <main class="screen-container">
+      <section id="screen-home" class="screen active">
+        <div class="screen-head compact">
+          <h2 class="screen-title">Factory Floor</h2>
+          <p class="screen-sub">Live production and boost controls</p>
+        </div>
+        <div class="mission-panel">
+          <div class="mission-head">
+            <span class="mission-tag">MISSION TRACKER</span>
+            <span class="mission-state">ACTIVE</span>
+          </div>
+          <p id="goalLabel" class="mission-goal">Goal: Upgrade the Cutter</p>
+          <div class="mod-progress mission-progress"><span id="missionProgress" style="width:0%"></span></div>
+          <div class="mission-inline"><span id="missionHint">Build momentum</span><span><strong id="rpsLabel">$0</strong>/s • <strong id="wpsLabel">0</strong> w/s • <strong id="cashFocus">$0</strong></span></div>
+        </div>
+
+        <div class="factory-view" id="factoryView">
+          <svg class="factory-links" viewBox="0 0 400 210" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M112 168 L150 168" />
+            <path d="M248 168 L286 168" />
+            <path d="M112 82 L150 82" />
+            <path d="M248 82 L286 82" />
+            <path d="M198 124 L198 92" />
+          </svg>
+          <div class="factory-bg-layer"></div>
+          <div class="energy-wave" id="energyWave"></div>
+          <div class="factory-grid" id="factoryGrid"></div>
+          <div class="fx-layer" id="fxLayer"></div>
+          <div class="ticker" id="incomeTicker">+$0</div>
+          <div class="modifier-banner" id="modifierBanner"></div>
+          <div class="view-caption">Production Floor</div>
+        </div>
+
+        <div class="action-dock">
+          <button id="rushBtn" class="primary-btn">⟡ Boost Production</button>
+          <p id="rushStatus" class="subtext">Tap for a temporary production boost.</p>
+        </div>
+        <div class="card section-card reward-hub">
+          <div class="row-head"><strong>Reward Hub</strong><span id="chestCountLabel">No chests</span></div>
+          <button id="openChestBtn" class="action-btn">Open Chest</button>
+          <div id="activeBoostList" class="list"></div>
+          <div id="claimList" class="list"></div>
+          <div id="milestoneList" class="list"></div>
+        </div>
+      </section>
+
+      <section id="screen-factory" class="screen">
+        <div class="screen-head">
+          <h2 class="screen-title">Factory Management</h2>
+          <p class="screen-sub">Upgrade lines and expand divisions</p>
+        </div>
+        <div class="card section-card">
+          <h3>Production Lines</h3>
+          <div id="lineList" class="list"></div>
+        </div>
+
+        <div class="card section-card">
+          <h3>Divisions</h3>
+          <div id="divisionList" class="list"></div>
+        </div>
+      </section>
+
+      <section id="screen-skills" class="screen">
+        <div class="screen-head">
+          <h2 class="screen-title">Skill Tree</h2>
+          <p class="screen-sub">Define your factory build path</p>
+        </div>
+        <div class="card section-card">
+          <div id="skillBranches" class="skill-branches"></div>
+        </div>
+      </section>
+      
+      <section id="screen-blueprints" class="screen">
+        <div class="screen-head">
+          <h2 class="screen-title">Blueprint Lab</h2>
+          <p class="screen-sub">Long-term tech unlock progression</p>
+        </div>
+        <div class="card section-card">
+          <div id="blueprintList" class="list"></div>
+        </div>
+      </section>
+
+      <section id="screen-contracts" class="screen">
+        <div class="screen-head">
+          <h2 class="screen-title">Contracts Board</h2>
+          <p class="screen-sub">Run timed jobs for burst rewards</p>
+        </div>
+        <div class="card section-card">
+          <button id="contractRefreshBtn" class="action-btn">Refresh Offers</button>
+          <p id="contractRefreshStatus" class="subtext">Pick from available offers.</p>
+        </div>
+        <div class="card section-card">
+          <h3>Active Contract</h3>
+          <div id="activeContract" class="list"></div>
+        </div>
+        <div class="card section-card">
+          <h3>Available Contracts</h3>
+          <div id="contractList" class="list"></div>
+        </div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav">
+      <button data-tab="home" class="tab active"><span class="tab-ico">◉</span><span>Home</span></button>
+      <button data-tab="factory" class="tab"><span class="tab-ico">▣</span><span>Factory</span></button>
+      <button data-tab="skills" class="tab"><span class="tab-ico">◇</span><span>Skills</span></button>
+      <button data-tab="blueprints" class="tab"><span class="tab-ico">◈</span><span>Blueprints</span></button>
+      <button data-tab="contracts" class="tab"><span class="tab-ico">▤</span><span>Contracts</span></button>
+    </nav>
+
+    <div id="drawerOverlay" class="drawer-overlay"></div>
+    <aside id="sideMenu" class="side-menu" aria-hidden="true">
+      <div class="drawer-head">
+        <h3>Factory HQ</h3>
+        <button id="closeMenuBtn" class="menu-btn" aria-label="Close menu">✕</button>
+      </div>
+      <button id="researchBtn">Convert Cash to Research</button>
+      <button id="prestigeBtn">Factory Modernization</button>
+      <button id="settingsBtn">Settings</button>
+      <button id="statsBtn">Stats Snapshot</button>
+      <button id="saveBtn">Manual Save</button>
+      <button id="resetBtn" class="danger">Hard Reset</button>
+      <p class="subtext">Secondary systems are here to keep the main UI focused.</p>
+    </aside>
+
+    <div id="toastLayer" class="toast-layer"></div>
+    <div id="modalLayer" class="modal-layer hidden"></div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
