@@ -10,7 +10,27 @@ const lineDefs = [
   { id: "pack", name: "Packaging Bay", baseCost: 26000, baseRate: 0.68, icon: "⬣", unlockReq: { line: "qc", level: 6 } }
 ];
 
-const lineMilestones = [5, 10, 20, 50];
+const lineMilestones = [5, 10, 25, 50];
+
+const chainSequences = [
+  { id: "school", steps: ["School Renovation I", "School Renovation II", "School Final Delivery"] },
+  { id: "villa", steps: ["Luxury Villa Order I", "Luxury Villa Order II", "Luxury Premium Finish"] },
+  { id: "export", steps: ["Export Batch I", "Customs Rush", "Regional Deal"] }
+];
+
+const runFocusOptions = [
+  { id: "prod", label: "Production Focus", desc: "+10% production this run" },
+  { id: "contract", label: "Contract Focus", desc: "+10% contract rewards this run" },
+  { id: "blueprint", label: "Blueprint Focus", desc: "+10% fragment chance this run" },
+  { id: "offline", label: "Offline Focus", desc: "+15% offline earnings this run" }
+];
+
+const softEventPool = [
+  { id: "glass_surge", text: "Glass Demand Surge", duration: 600, contractRewardMul: 1.2 },
+  { id: "supplier_discount", text: "Supplier Discount", duration: 300, costMul: 0.9 },
+  { id: "power_surge", text: "Power Surge", duration: 120, prodMul: 1.15 },
+  { id: "export_rush", text: "Export Rush", duration: 300, contractSpeedMul: 1.1 }
+];
 
 const divisionDefs = [
   { id: "residential", name: "Residential Unit", reqCash: 900, bonus: 0.06 },
@@ -124,10 +144,15 @@ const defaultState = () => ({
   contractChainDepth: 0,
   contractBossWins: 0,
   completedContracts: 0,
+  activeChain: null,
   chests: { common: 0, rare: 0, epic: 0, legendary: 0 },
   claimedMilestones: [],
   pendingClaims: [],
   activeBoosts: [],
+  activeRunEvent: null,
+  runEventNextAt: 0,
+  runFocus: null,
+  offlineReport: null,
   skills: [],
   skillPoints: 1,
   skillXp: 0,
@@ -384,6 +409,10 @@ function validateGameState(reason = "runtime") {
   state.completedContracts = Math.floor(clampNonNegative(state.completedContracts, 0, "completedContracts"));
   state.contractChainDepth = Math.floor(clampNonNegative(state.contractChainDepth, 0, "contractChainDepth"));
   state.contractBossWins = Math.floor(clampNonNegative(state.contractBossWins, 0, "contractBossWins"));
+  if (!state.activeChain || typeof state.activeChain !== "object") state.activeChain = null;
+  if (!state.activeRunEvent || typeof state.activeRunEvent !== "object") state.activeRunEvent = null;
+  state.runEventNextAt = clampNonNegative(state.runEventNextAt, 0, "runEventNextAt");
+  if (!runFocusOptions.some((f) => f.id === state.runFocus)) state.runFocus = null;
 
   state.skillPoints = Math.floor(clampNonNegative(state.skillPoints, defaults.skillPoints, "skillPoints"));
   state.skillXp = clampNonNegative(state.skillXp, defaults.skillXp, "skillXp");
@@ -578,6 +607,7 @@ function gameTick() {
 
     tickContract(dt, made);
     tickModifier(now);
+    tickRunEvent(now);
 
     if (now > state.rush.activeUntil && now < state.rush.cooldownUntil) {
       const rem = Math.ceil((state.rush.cooldownUntil - now) / 1000);
@@ -735,6 +765,7 @@ function calcWindowsPerSec() {
 
   let modifierMul = 1;
   if (state.activeModifier && state.activeModifier.prodMul) modifierMul *= state.activeModifier.prodMul;
+  if (state.activeRunEvent?.prodMul) modifierMul *= state.activeRunEvent.prodMul;
 
   if (state.flags.continuousCasting) wps *= 1.12;
   if (state.flags.zeroDefect) wps *= 0.95;
@@ -768,6 +799,7 @@ function getActiveBoostValue(kind) {
 function lineUpgradeCost(line) {
   const lv = state.lines[line.id].level;
   let discount = 1 - Math.min(0.18, state.modifiers.costDiscount);
+  if (state.activeRunEvent?.costMul) discount *= state.activeRunEvent.costMul;
   discount *= 1 - Math.min(0.2, state.metaUpgrades.costEngineering * 0.01);
   if (state.flags.bpFirstUpgradeDiscount && state.runState.firstUpgradeDiscountPending) discount *= 0.82;
   if (state.flags.unionMomentum) discount *= 1.04;
@@ -776,6 +808,7 @@ function lineUpgradeCost(line) {
 
 function lineUpgradeCostAtLevel(line, level) {
   let discount = 1 - Math.min(0.18, state.modifiers.costDiscount);
+  if (state.activeRunEvent?.costMul) discount *= state.activeRunEvent.costMul;
   discount *= 1 - Math.min(0.2, state.metaUpgrades.costEngineering * 0.01);
   if (state.flags.bpFirstUpgradeDiscount && state.runState.firstUpgradeDiscountPending) discount *= 0.82;
   if (state.flags.unionMomentum) discount *= 1.04;
@@ -841,7 +874,7 @@ function buyLine(lineId, qtyRequest = 1) {
       state.resources.reputation += 0.8 + lineMilestones.indexOf(step) * 0.7;
       showRewardPopup(`${def.name} milestone Lv ${step}`);
       toast(`${def.name} milestone Lv ${step}! +${milestoneReward} research.`);
-      if (step >= 20) state.resources.parts += 2 + lineMilestones.indexOf(step);
+      if (step >= 25) state.resources.parts += 2 + lineMilestones.indexOf(step);
     }
   }
   flashMachine(lineId);
@@ -887,7 +920,46 @@ function activateRush() {
   toast("Rush Order accepted! Lines overclocked.");
 }
 
+function getNextChainStepOffer() {
+  if (!state.activeChain) return null;
+  const seq = chainSequences.find((s) => s.id === state.activeChain.id);
+  if (!seq) return null;
+  const idx = state.activeChain.step || 0;
+  if (idx >= seq.steps.length) return null;
+  const base = contractTemplates[Math.min(contractTemplates.length - 1, 1 + idx)];
+  const scale = 1 + idx * 0.2;
+  return {
+    id: `chain_${seq.id}_${idx}_${Date.now()}`,
+    templateId: base.id,
+    name: seq.steps[idx],
+    type: idx === seq.steps.length - 1 ? "Premium" : "Standard",
+    duration: Math.ceil(base.baseDuration * (0.82 + idx * 0.1)),
+    windows: Math.ceil(base.baseWindows * scale),
+    minRep: Math.max(0, Math.ceil(base.minRep * (0.8 + idx * 0.12))),
+    failRep: Math.max(1, Math.ceil((base.failRep || 2) * (0.9 + idx * 0.1))),
+    rewards: {
+      cash: Math.ceil((base.rewards.cash || 0) * (1.15 + idx * 0.2)),
+      rep: Math.ceil((base.rewards.rep || 0) + idx),
+      research: Math.ceil((base.rewards.research || 0) * (1 + idx * 0.25)),
+      parts: Math.ceil((base.rewards.parts || 0) * (1 + idx * 0.2))
+    },
+    fragmentReward: (base.fragments || 0) + (idx > 0 ? 1 : 0),
+    specialType: "Chain",
+    tierRequired: Math.max(1, state.contractTier - 1),
+    limited: true,
+    expiresAt: Date.now() + 55000,
+    rarityTier: idx === seq.steps.length - 1 ? "A" : "B",
+    special: base.special || null,
+    modifiers: [`Chain Step ${idx + 1}/${seq.steps.length}`],
+    requiredLine: idx > 1 ? { id: "assembler", level: 10 } : null,
+    riskPenaltyChance: 0.08 + idx * 0.05,
+    chainMeta: { id: seq.id, step: idx, total: seq.steps.length }
+  };
+}
+
 function generateContractOffer() {
+  const chained = getNextChainStepOffer();
+  if (chained) return chained;
   const template = contractTemplates[Math.floor(Math.random() * contractTemplates.length)];
   const typeNames = Object.keys(contractTypes);
   const type = typeNames[Math.floor(Math.random() * typeNames.length)];
@@ -942,7 +1014,8 @@ function generateContractOffer() {
     special: template.special || null,
     modifiers: mods.map((m) => m.text),
     requiredLine: modPack.requiredLine,
-    riskPenaltyChance: typeCfg.riskPenaltyChance + (specialType === "Boss" ? 0.04 : 0)
+    riskPenaltyChance: typeCfg.riskPenaltyChance + (specialType === "Boss" ? 0.04 : 0),
+    chainMeta: null
   };
 }
 
@@ -989,7 +1062,7 @@ function startContract(id) {
     targetWindows: c.windows,
     rewardPack: c.rewards,
     fragmentReward: c.fragmentReward || 0,
-    remaining: Math.ceil(c.duration * state.modifiers.contractDurationMul),
+    remaining: Math.ceil(c.duration * state.modifiers.contractDurationMul * (state.activeRunEvent?.contractSpeedMul ? (1 / state.activeRunEvent.contractSpeedMul) : 1)),
     progress: 0,
     status: "active",
     rewardGranted: false
@@ -1051,6 +1124,7 @@ function claimContractReward() {
   if (c.specialType === "VIP") mult += state.modifiers.vipContractReward;
   if (c.specialType === "Boss" && state.flags.bossBreaker) mult += 0.15;
   if (c.specialType === "Chain" && state.flags.chainMastery) mult += Math.min(0.22, state.contractChainDepth * 0.04);
+  if (state.activeRunEvent?.contractRewardMul) mult *= state.activeRunEvent.contractRewardMul;
   if (c.type === "Risky" && Math.random() < (c.riskPenaltyChance || 0)) {
     mult *= 0.72;
     toast("Risk event: payout reduced.");
@@ -1087,6 +1161,15 @@ function claimContractReward() {
   grantSkillXp(1 + (c.type === "Premium" ? 1 : 0), "contract completion");
 
   state.completedContracts += 1;
+  if (c.specialType === "Chain") {
+    const seq = c.chainMeta?.id || state.activeChain?.id || chainSequences[Math.floor(Math.random() * chainSequences.length)].id;
+    const nextStep = (c.chainMeta?.step ?? state.activeChain?.step ?? 0) + 1;
+    const total = c.chainMeta?.total || 3;
+    state.activeChain = nextStep < total ? { id: seq, step: nextStep } : null;
+  } else if (!state.activeChain && Math.random() < 0.16 && state.contractTier >= 2) {
+    const seq = chainSequences[Math.floor(Math.random() * chainSequences.length)];
+    state.activeChain = { id: seq.id, step: 0 };
+  }
   gainContractXp(c);
   maybeAwardChest(c);
   showRewardPopup(`Claimed +$${fmt((c.rewardPack.cash || 0) * mult)} • +${fragGain} fragments`);
@@ -1233,9 +1316,27 @@ function applyLineMilestoneBonuses() {
   const qcLv = state.lines.qc.level;
 
   if (frameLv >= 10) state.modifiers.lineSynergy += 0.05;
-  if (forgeLv >= 10) state.modifiers.rareFragmentChance += 0.025;
-  if (assemblyLv >= 20) state.modifiers.contractDurationMul -= 0.06;
-  if (qcLv >= 20) state.modifiers.contractFailurePenaltyMul -= 0.08;
+  if (forgeLv >= 25) state.modifiers.rareFragmentChance += 0.03;
+  if (assemblyLv >= 25) state.modifiers.contractDurationMul -= 0.06;
+  if (qcLv >= 10) state.modifiers.contractReward += 0.05;
+  if (qcLv >= 25) state.modifiers.contractFailurePenaltyMul -= 0.08;
+  if (frameLv >= 10) state.modifiers.prod += 0.02;
+  if (state.lines.pack.level >= 50) state.modifiers.contractReward += 0.05;
+
+  const unlocked = new Set(state.blueprints);
+  const setCounts = {
+    glass: ["bp_glass", "bp_thermal", "bp_finish"].filter((id) => unlocked.has(id)).length,
+    contract: ["bp_glass", "bp_assembly", "bp_finish"].filter((id) => unlocked.has(id)).length,
+    automation: ["bp_frame", "bp_thermal", "bp_assembly"].filter((id) => unlocked.has(id)).length
+  };
+  if (setCounts.glass >= 3) state.modifiers.prod += 0.05;
+  if (setCounts.contract >= 3) state.modifiers.contractReward += 0.1;
+  if (setCounts.automation >= 3) state.modifiers.offlineEfficiency += 0.1;
+
+  if (state.runFocus === "prod") state.modifiers.prod += 0.1;
+  if (state.runFocus === "contract") state.modifiers.contractReward += 0.1;
+  if (state.runFocus === "blueprint") state.modifiers.rareFragmentChance += 0.1;
+  if (state.runFocus === "offline") state.modifiers.offlineEfficiency += 0.15;
   if (lineDefs.every((l) => state.lines[l.id].level >= 50)) {
     state.modifiers.prod += 0.15;
     state.modifiers.contractReward += 0.08;
@@ -1474,9 +1575,27 @@ function openModernizationSummary(summary) {
       <div class="row"><div class="row-head"><strong>Blueprints Unlocked</strong><span>${summary.blueprints}</span></div></div>
       <div class="row"><div class="row-head"><strong>Run Time</strong><span>${fmt(summary.playtime / 60)} min</span></div></div>
     </div>
-    <button class="action-btn" id="closeModernizeSummary">Start New Run</button>
+    <button class="action-btn" id="closeModernizeSummary">Choose Run Focus</button>
   `);
-  document.getElementById("closeModernizeSummary")?.addEventListener("click", closeModal);
+  document.getElementById("closeModernizeSummary")?.addEventListener("click", openRunFocusPicker);
+}
+
+function openRunFocusPicker() {
+  activeModal = "runFocus";
+  openModal(`
+    <h3>Run Focus</h3>
+    <p>Select one temporary focus for this run.</p>
+    <div class="list">
+      ${runFocusOptions.map((f) => `<div class="row"><div class="row-head"><strong>${f.label}</strong><span>${state.runFocus === f.id ? "Active" : ""}</span></div><div class="row-meta"><span>${f.desc}</span><button class="action-btn slim" data-run-focus="${f.id}">Choose</button></div></div>`).join("")}
+    </div>
+  `);
+  document.querySelectorAll("[data-run-focus]").forEach((btn) => btn.addEventListener("click", () => {
+    state.runFocus = btn.dataset.runFocus;
+    recalculateProgressionEffects();
+    closeModal();
+    toast(`Run focus set: ${runFocusOptions.find((f) => f.id === state.runFocus)?.label}`);
+    renderAll();
+  }));
 }
 
 function openModernizationHub() {
@@ -1506,10 +1625,10 @@ function openModernizationHub() {
       const nextEffect = u.effect ? u.effect(Math.min(u.max, lvl + 1)) : `Lv ${lvl + 1}`;
       return `<div class="mod-card ${affordable && !maxed ? "affordable" : ""}" data-upgrade-card="${u.key}">
         <div class="mod-card-head"><span class="mod-icon">${u.icon || "◍"}</span><div><strong>${u.name}</strong><small>${u.category}</small></div><span>Lv ${lvl}/${u.max}</span></div>
-        <p>${u.desc}</p>
         <div class="row-meta"><span>Current: ${currentEffect}</span><span>${maxed ? "MAXED" : `Next: ${nextEffect}`}</span></div>
         <div class="mod-progress"><span style="width:${progressPct}%"></span></div>
         <div class="row-meta"><span>${maxed ? "No further cost" : `Cost ${cost} TK`}</span><span>${maxed ? "Completed" : (affordable ? "Affordable now" : `Need ${missing} more`)}</span></div>
+        <button class="action-btn slim" data-meta-detail="${u.key}">Details</button>
         ${maxed ? "" : `<button class="action-btn" data-meta="${u.key}" ${disabled}>Invest</button>`}
       </div>`;
     }).join("");
@@ -1551,6 +1670,9 @@ function openModernizationHub() {
   });
   document.querySelectorAll("[data-meta]").forEach((btn) => {
     btn.addEventListener("click", () => buyModernizationUpgrade(btn.dataset.meta));
+  });
+  document.querySelectorAll("[data-meta-detail]").forEach((btn) => {
+    btn.addEventListener("click", () => openMetaUpgradeDetail(btn.dataset.metaDetail));
   });
   document.getElementById("modernizeRun")?.addEventListener("click", tryModernize);
   document.getElementById("closeModernizeHub")?.addEventListener("click", closeModal);
@@ -1603,6 +1725,22 @@ function tickModifier(now) {
     state.modifierUntil = 0;
     renderHUD();
   }
+}
+
+function tickRunEvent(now) {
+  if (state.activeRunEvent && now >= state.activeRunEvent.until) {
+    toast(`${state.activeRunEvent.text} ended.`);
+    state.activeRunEvent = null;
+  }
+  if (state.activeRunEvent) return;
+  if (!state.runEventNextAt) state.runEventNextAt = now + 150000;
+  if (now < state.runEventNextAt) return;
+  if (Math.random() < 0.35) {
+    const e = softEventPool[Math.floor(Math.random() * softEventPool.length)];
+    state.activeRunEvent = { ...e, until: now + e.duration * 1000 };
+    toast(`Run event: ${e.text}`);
+  }
+  state.runEventNextAt = now + (150000 + Math.random() * 150000);
 }
 
 function showStats() {
@@ -1830,14 +1968,18 @@ function renderHUD() {
   }
   goalReadyLastTick = goalReady;
 
+  const bannerBits = [];
   if (state.activeModifier) {
     const sec = Math.max(0, Math.ceil((state.modifierUntil - Date.now()) / 1000));
-    if (el.modifierBanner) {
-      el.modifierBanner.style.display = "block";
-      el.modifierBanner.textContent = `${state.activeModifier.text} (${sec}s)`;
-    }
-  } else {
-    if (el.modifierBanner) el.modifierBanner.style.display = "none";
+    bannerBits.push(`${state.activeModifier.text} (${sec}s)`);
+  }
+  if (state.activeRunEvent?.until) {
+    const sec = Math.max(0, Math.ceil((state.activeRunEvent.until - Date.now()) / 1000));
+    bannerBits.push(`${state.activeRunEvent.text} (${sec}s)`);
+  }
+  if (el.modifierBanner) {
+    el.modifierBanner.style.display = bannerBits.length ? "block" : "none";
+    el.modifierBanner.textContent = bannerBits.join(" • ");
   }
 
   if (el.lastSavedLabel) {
@@ -1853,7 +1995,9 @@ function updateTabBadges() {
   const rewardsReady = state.pendingClaims.length + milestoneDefs.filter((m) => !state.claimedMilestones.includes(m.id) && m.progress() >= 1).length;
   const skillsReady = Math.max(0, Math.floor(state.skillPoints));
   const contractReady = state.contract?.status === "completed" ? 1 : 0;
-  const map = { home: rewardsReady, skills: skillsReady, contracts: contractReady };
+  const nextBp = blueprintDefs.find((bp) => !state.blueprints.includes(bp.id));
+  const blueprintsReady = nextBp && state.blueprintFragments >= nextBp.fragmentCost ? 1 : 0;
+  const map = { home: rewardsReady, skills: skillsReady, blueprints: blueprintsReady, contracts: contractReady };
   document.querySelectorAll(".bottom-nav .tab").forEach((tab) => {
     const key = tab.dataset.tab;
     const value = map[key] || 0;
@@ -1889,12 +2033,15 @@ function renderFactory() {
     const reqText = unlocked || !line.unlockReq ? "" : `Needs ${lineDefs.find((x) => x.id === line.unlockReq.line).name} Lv ${line.unlockReq.level}`;
     const affordable = unlocked && bulk.qty > 0;
     const milestoneCount = lineMilestonesReached(lv);
+    const nextMilestone = lineMilestones.find((m) => m > lv);
     const milestoneLabel = milestoneCount ? `${milestoneCount}/${lineMilestones.length} milestones` : "No milestone";
+    const milestoneProgress = nextMilestone ? `Next milestone Lv ${nextMilestone}` : "All milestones reached";
     const modeLabel = lineBuyMode === "max" ? `Buy Max ${bulk.qty > 0 ? `(${bulk.qty})` : ""}` : `Buy x${lineBuyMode}`;
-    return `<div class="row ${affordable ? "affordable" : ""}"><div class="row-head"><strong>${line.icon} ${line.name}</strong><span>Lv ${lv}</span></div><div class="row-meta"><span>${active ? `${fmt(line.baseRate * lv * (1 + Math.sqrt(lv) * 0.03))} w/s raw` : "Locked"}</span><span>Cost $${fmt(cost)}</span></div><div class="row-meta"><span>${reqText || "Unlocked"}</span><span>${bulk.qty > 0 ? affordText : "Requires more income"}</span></div><div class="row-meta"><span>${milestoneLabel}</span><span>Plant synergy +${synergyPct}%</span></div><button class="action-btn" data-line="${line.id}" ${(!unlocked || !affordable) ? "disabled" : ""}>${modeLabel}</button></div>`;
+    return `<div class="row ${affordable ? "affordable" : ""} ${!unlocked ? "locked" : ""}"><div class="row-head"><strong>${line.icon} ${line.name}</strong><span>Lv ${lv}</span></div><div class="row-meta"><span>${active ? `${fmt(line.baseRate * lv * (1 + Math.sqrt(lv) * 0.03))} w/s raw` : "Locked"}</span><span>Cost $${fmt(cost)}</span></div><div class="row-meta"><span>${reqText || "Unlocked"}</span><span>${bulk.qty > 0 ? affordText : "Requires more income"}</span></div><div class="row-meta"><span>${milestoneLabel}</span><span>${milestoneProgress}</span></div><div class="row-meta"><span>Plant synergy +${synergyPct}%</span><button class="action-btn slim" data-line-detail="${line.id}">Details</button></div><button class="action-btn" data-line="${line.id}" ${(!unlocked || !affordable) ? "disabled" : ""}>${modeLabel}</button></div>`;
   }).join("");
 
   el.lineList.querySelectorAll("button[data-line]").forEach((btn) => btn.addEventListener("click", () => buyLine(btn.dataset.line, "mode")));
+  el.lineList.querySelectorAll("button[data-line-detail]").forEach((btn) => btn.addEventListener("click", () => openLineDetail(btn.dataset.lineDetail)));
 }
 
 function renderDivisions() {
@@ -1934,7 +2081,7 @@ function renderContracts() {
     const tierLock = (c.tierRequired || 1) > state.contractTier;
     const lineLock = c.requiredLine && state.lines[c.requiredLine.id].level < c.requiredLine.level;
     const statusText = tierLock ? `Tier ${c.tierRequired}` : (lock ? "Rep locked" : (lineLock ? "Line locked" : "Ready"));
-    const special = c.modifiers?.length ? c.modifiers.join(" • ") : "No modifiers";
+    const special = c.modifiers?.length ? c.modifiers[0] : "Standard terms";
     const typeClass = `type-${c.type.toLowerCase()}`;
     const specialBadge = c.specialType ? `<span>${c.specialType}</span>` : `<span>${c.type}</span>`;
     const limitedLeft = c.limited ? Math.max(0, Math.ceil((c.expiresAt - Date.now()) / 1000)) : null;
@@ -1942,11 +2089,11 @@ function renderContracts() {
     return `<div class="row contract-card state-available ${typeClass} ${best?.id === c.id ? "best-option" : ""}">
       <div class="row-head"><strong>${c.name}</strong>${specialBadge}</div>
       <div class="row-meta"><span>Value Tier ${c.rarityTier || "C"}</span><span>${c.limited ? `<span class="${nearExpiry ? "ready-pulse" : ""}">Limited ${limitedLeft}s</span>` : "Standard window"}</span></div>
-      <div class="row-meta"><span>Need ${c.windows} windows in ${c.duration}s</span><span>Rep ${c.minRep.toFixed(0)}</span></div>
-      <div class="row-meta"><span>Reward: $${fmt(c.rewards.cash)} + extras</span><span>Fragments +${c.fragmentReward || 0}</span></div>
-      <div class="row-meta"><span>${special}</span><span>${statusText} • Fail -${c.failRep} rep</span></div>
+      <div class="row-meta"><span>${c.windows} windows • ${c.duration}s</span><span>Rep ${c.minRep.toFixed(0)}</span></div>
+      <div class="row-meta"><span>$${fmt(c.rewards.cash)} • +${c.fragmentReward || 0} frags</span><span>${statusText}</span></div>
+      <div class="row-meta"><span>${special}</span><span>Fail -${c.failRep} rep</span></div>
       ${c.requiredLine ? `<div class="row-meta"><span>Requires ${lineDefs.find((l) => l.id === c.requiredLine.id)?.name || "Line"} Lv ${c.requiredLine.level}</span><span></span></div>` : ""}
-      <div class="row-meta"><span>Tier ${c.tierRequired || 1} contract</span><span>${c.type}</span></div>
+      <div class="row-meta"><span>Tier ${c.tierRequired || 1}</span><button class="action-btn slim" data-contract-detail="${c.id}">Details</button></div>
       ${(!lock && !tierLock && !lineLock && !state.contract) ? `<button class="action-btn ${nearExpiry ? "ready-pulse" : ""}" data-contract="${c.id}">Start</button>` : ""}
     </div>`;
   }).join("");
@@ -1962,6 +2109,7 @@ function renderContracts() {
   }
 
   el.contractList.querySelectorAll("button[data-contract]").forEach((btn) => btn.addEventListener("click", () => startContract(btn.dataset.contract)));
+  el.contractList.querySelectorAll("button[data-contract-detail]").forEach((btn) => btn.addEventListener("click", () => openContractDetail(btn.dataset.contractDetail)));
   el.activeContract.querySelector("[data-claim-contract]")?.addEventListener("click", claimContractReward);
   if (el.contractRefreshBtn) {
     el.contractRefreshBtn.onclick = () => {
@@ -1973,20 +2121,30 @@ function renderContracts() {
 function renderSkills() {
   const grouped = [...new Set(skillDefs.map((s) => s.branch))];
   const xpNeed = skillXpToNext(state.skillLevel);
-  const header = `<div class="row"><div class="row-head"><strong>Skill Points</strong><span>${state.skillPoints}</span></div><div class="row-meta"><span>Level ${state.skillLevel}</span><span>${fmt(state.skillXp)} / ${xpNeed} XP</span></div><div class="row-meta"><span>Build Identity</span><span>${getBuildIdentity()}</span></div><button class="action-btn" id="respecSkillsBtn">Respec Tree (2 TK + 1% run cash)</button></div>`;
+  const header = `<div class="row"><div class="row-head"><strong>Skill Points</strong><span>${state.skillPoints}</span></div><div class="row-meta"><span>Level ${state.skillLevel}</span><span>${fmt(state.skillXp)} / ${xpNeed} XP</span></div><div class="row-meta"><span>Current Build</span><span>${getBuildIdentity()}</span></div><button class="action-btn" id="respecSkillsBtn">Respec Tree (2 TK + 1% run cash)</button></div>`;
   const body = grouped.map((b) => {
     const branchSkills = skillDefs.filter((s) => s.branch === b);
     const owned = branchSkills.filter((s) => state.skills.includes(s.id)).length;
     return `<div class="branch"><div class="row-head"><strong>${b}</strong><span>${owned}/${branchSkills.length}</span></div><div class="nodes">${branchSkills.map((s) => {
       const ownedNode = state.skills.includes(s.id);
       const canBuy = canUnlockSkill(s);
-      const prereqLabel = s.prereq && !ownedNode ? `Req: ${skillDefs.find((x) => x.id === s.prereq)?.name || "Node"}` : s.desc;
-      return `<button class="node ${s.type || ""} ${ownedNode ? "owned" : ""} ${(!ownedNode && canBuy) ? "affordable" : ""}" data-skill="${s.id}" ${ownedNode || !canBuy ? "disabled" : ""}>${s.type === "keystone" ? `<span class="node-tag">Keystone</span>` : ""}<span class="node-title">${s.name}</span><span class="node-cost">${ownedNode ? "Selected" : `${s.cost} SP`}</span><span class="node-desc">${prereqLabel}</span></button>`;
+      const prereqLabel = s.prereq && !ownedNode ? `Req ${skillDefs.find((x) => x.id === s.prereq)?.name || "Node"}` : s.desc;
+      return `<div class="node ${s.type || ""} ${ownedNode ? "owned" : ""} ${(!ownedNode && canBuy) ? "affordable" : ""} ${(!ownedNode && !canBuy) ? "locked" : ""}">
+        ${s.type === "keystone" ? `<span class="node-tag">Keystone</span>` : ""}
+        <span class="node-title">${s.name}</span>
+        <span class="node-cost">${ownedNode ? "Selected" : `${s.cost} SP`}</span>
+        <span class="node-desc">${prereqLabel}</span>
+        <div class="node-actions">
+          <button class="action-btn slim" data-skill-detail="${s.id}">Details</button>
+          ${ownedNode ? "" : `<button class="action-btn slim" data-skill="${s.id}" ${canBuy ? "" : "disabled"}>Unlock</button>`}
+        </div>
+      </div>`;
     }).join("")}</div></div>`;
   }).join("");
   el.skillBranches.innerHTML = `${header}${body}`;
 
   el.skillBranches.querySelectorAll("button[data-skill]").forEach((btn) => btn.addEventListener("click", () => buySkill(btn.dataset.skill)));
+  el.skillBranches.querySelectorAll("button[data-skill-detail]").forEach((btn) => btn.addEventListener("click", () => openSkillDetail(btn.dataset.skillDetail)));
   document.getElementById("respecSkillsBtn")?.addEventListener("click", respecSkills);
 }
 
@@ -2013,13 +2171,83 @@ function getBuildIdentity() {
 function renderBlueprints() {
   const nextBp = blueprintDefs.find((bp) => !state.blueprints.includes(bp.id));
   const progressPct = nextBp ? Math.min(100, Math.floor((state.blueprintFragments / nextBp.fragmentCost) * 100)) : 100;
-  const fragmentHeader = `<div class="row"><div class="row-head"><strong>Blueprint Fragments</strong><span>${fmt(state.blueprintFragments)}</span></div><div class="row-meta"><span>Earned mainly from contracts. Unlocks trigger automatically.</span><span>${state.blueprints.length}/${blueprintDefs.length} unlocked</span></div><div class="mod-progress"><span style="width:${progressPct}%"></span></div><div class="row-meta"><span>${nextBp ? `Next: ${nextBp.name}` : "All blueprints unlocked"}</span><span>${progressPct}%</span></div></div>`;
+  const setProgress = [
+    { key: "Glass Set", count: ["bp_glass", "bp_thermal", "bp_finish"].filter((id) => state.blueprints.includes(id)).length, bonus: "+5% production" },
+    { key: "Contract Set", count: ["bp_glass", "bp_assembly", "bp_finish"].filter((id) => state.blueprints.includes(id)).length, bonus: "+10% contract rewards" },
+    { key: "Automation Set", count: ["bp_frame", "bp_thermal", "bp_assembly"].filter((id) => state.blueprints.includes(id)).length, bonus: "+10% offline earnings" }
+  ];
+  const fragmentHeader = `<div class="row"><div class="row-head"><strong>Blueprint Fragments</strong><span>${fmt(state.blueprintFragments)}</span></div><div class="row-meta"><span>${state.blueprints.length}/${blueprintDefs.length} unlocked</span><span>${nextBp ? `Next: ${nextBp.name}` : "All unlocked"}</span></div><div class="mod-progress"><span style="width:${progressPct}%"></span></div><div class="row-meta"><span>${nextBp ? `${Math.max(0, nextBp.fragmentCost - state.blueprintFragments)} needed` : "Collection complete"}</span><span>${progressPct}%</span></div><div class="row-meta"><span>${setProgress.map((s) => `${s.key} ${s.count}/3`).join(" • ")}</span><span>${setProgress.filter((s) => s.count >= 3).map((s) => s.bonus).join(" • ") || "No set bonuses active"}</span></div></div>`;
   const cards = blueprintDefs.map((bp) => {
     const unlocked = state.blueprints.includes(bp.id);
     const remain = Math.max(0, bp.fragmentCost - state.blueprintFragments);
-    return `<div class="row blueprint-card ${unlocked ? "unlocked" : "locked"} rarity-${bp.rarity.toLowerCase()}"><div class="row-head"><strong>${bp.name}</strong><span>${bp.rarity}</span></div><div class="row-meta"><span>${bp.desc}</span><span>${unlocked ? "Unlocked" : `${remain} fragments needed`}</span></div><div class="row-meta"><span>Cost ${bp.fragmentCost} fragments</span><span>${unlocked ? "Applied" : "Locked"}</span></div></div>`;
+    return `<div class="row blueprint-card ${unlocked ? "unlocked" : "locked"} rarity-${bp.rarity.toLowerCase()}"><div class="row-head"><strong>${bp.name}</strong><span>${bp.rarity}</span></div><div class="row-meta"><span>${unlocked ? "Applied" : `${remain} fragments needed`}</span><span>Cost ${bp.fragmentCost}</span></div><div class="row-meta"><span>${unlocked ? "Unlocked" : "Locked"}</span><button class="action-btn slim" data-blueprint-detail="${bp.id}">Details</button></div></div>`;
   }).join("");
   el.blueprintList.innerHTML = `${fragmentHeader}${cards}`;
+  el.blueprintList.querySelectorAll("[data-blueprint-detail]").forEach((btn) => btn.addEventListener("click", () => openBlueprintDetail(btn.dataset.blueprintDetail)));
+}
+
+function openSkillDetail(skillId) {
+  const s = skillDefs.find((x) => x.id === skillId);
+  if (!s) return;
+  const owned = state.skills.includes(s.id);
+  const prereqMet = !s.prereq || state.skills.includes(s.prereq);
+  openModal(`
+    <h3>${s.name}</h3>
+    <div class="row"><div class="row-head"><strong>Branch</strong><span>${s.branch}</span></div><div class="row-meta"><span>${s.desc}</span><span>Tier ${s.tier}</span></div><div class="row-meta"><span>Cost ${s.cost} SP</span><span>${owned ? "Selected" : (prereqMet ? "Ready" : "Prerequisite missing")}</span></div></div>
+    ${owned ? "" : `<button class="action-btn" id="unlockSkillFromDetail" ${canUnlockSkill(s) ? "" : "disabled"}>Unlock Skill</button>`}
+  `);
+  document.getElementById("unlockSkillFromDetail")?.addEventListener("click", () => {
+    buySkill(skillId);
+    closeModal();
+  });
+}
+
+function openBlueprintDetail(bpId) {
+  const bp = blueprintDefs.find((x) => x.id === bpId);
+  if (!bp) return;
+  const unlocked = state.blueprints.includes(bp.id);
+  const remain = Math.max(0, bp.fragmentCost - state.blueprintFragments);
+  openModal(`
+    <h3>${bp.name}</h3>
+    <div class="row"><div class="row-head"><strong>${bp.rarity}</strong><span>${unlocked ? "Unlocked" : "Locked"}</span></div><div class="row-meta"><span>${bp.desc}</span><span>Cost ${bp.fragmentCost} fragments</span></div><div class="row-meta"><span>${unlocked ? "Effect active this run." : `${remain} fragments needed`}</span><span></span></div></div>
+  `);
+}
+
+function openLineDetail(lineId) {
+  const line = lineDefs.find((x) => x.id === lineId);
+  if (!line) return;
+  const lv = state.lines[line.id].level;
+  const milestones = lineMilestones.map((m) => `${m}: ${lv >= m ? "claimed" : `needs Lv ${m}`}`).join(" • ");
+  openModal(`
+    <h3>${line.icon} ${line.name}</h3>
+    <div class="row"><div class="row-head"><strong>Line Status</strong><span>Lv ${lv}</span></div><div class="row-meta"><span>Current output ${fmt(line.baseRate * lv * (1 + Math.sqrt(Math.max(1, lv)) * 0.03))} w/s raw</span><span>Base cost $${fmt(line.baseCost)}</span></div><div class="row-meta"><span>Milestones</span><span>${milestones}</span></div></div>
+  `);
+}
+
+function openContractDetail(contractId) {
+  const c = state.contractBoard.find((x) => x.id === contractId);
+  if (!c) return;
+  const req = c.requiredLine ? `${lineDefs.find((l) => l.id === c.requiredLine.id)?.name || "Line"} Lv ${c.requiredLine.level}` : "No line requirement";
+  openModal(`
+    <h3>${c.name}</h3>
+    <div class="row"><div class="row-head"><strong>${c.specialType || c.type}</strong><span>Tier ${c.tierRequired || 1}</span></div><div class="row-meta"><span>${c.windows} windows in ${c.duration}s</span><span>Rep ${c.minRep.toFixed(0)}</span></div><div class="row-meta"><span>Rewards: $${fmt(c.rewards.cash)} • +${c.fragmentReward || 0} fragments</span><span>Fail -${c.failRep} rep</span></div><div class="row-meta"><span>Requirements: ${req}</span><span>${(c.modifiers || []).join(" • ") || "Standard terms"}</span></div></div>
+  `);
+}
+
+function openMetaUpgradeDetail(key) {
+  const u = getModernizationUpgradeDefs().find((x) => x.key === key);
+  if (!u) return;
+  const lv = state.metaUpgrades[key] || 0;
+  const cost = modernizationUpgradeCost(u);
+  openModal(`
+    <h3>${u.name}</h3>
+    <div class="row"><div class="row-head"><strong>${u.category}</strong><span>Lv ${lv}/${u.max}</span></div><div class="row-meta"><span>${u.desc}</span><span>Current: ${u.effect(lv)}</span></div><div class="row-meta"><span>Next: ${u.effect(Math.min(u.max, lv + 1))}</span><span>${lv >= u.max ? "MAXED" : `Cost ${cost} TK`}</span></div></div>
+    ${lv >= u.max ? "" : `<button class="action-btn" id="buyMetaFromDetail" ${state.resources.tokens >= cost ? "" : "disabled"}>Invest</button>`}
+  `);
+  document.getElementById("buyMetaFromDetail")?.addEventListener("click", () => {
+    buyModernizationUpgrade(key);
+    closeModal();
+  });
 }
 
 function bootstrapFactoryVisual() {
@@ -2194,14 +2422,61 @@ function applyOfflineEarnings() {
   const capBonusMinutes = state.metaUpgrades.offlineCap * 5;
   const cappedSec = Math.min((20 + capBonusMinutes) * 60, offlineSec);
   const offlineRate = calcWindowsPerSec() * cashPerWindow();
-  const offlineBoost = 1 + state.metaUpgrades.offlineLogistics * 0.1 + state.modifiers.offlineEfficiency + (state.flags.darkShift ? 0.2 : 0);
+  const focusBonus = state.runFocus === "offline" ? 0.15 : 0;
+  const setBonus = ["bp_frame", "bp_thermal", "bp_assembly"].filter((id) => state.blueprints.includes(id)).length >= 3 ? 0.1 : 0;
+  const offlineBoost = 1 + state.metaUpgrades.offlineLogistics * 0.1 + state.modifiers.offlineEfficiency + (state.flags.darkShift ? 0.2 : 0) + focusBonus + setBonus;
   const offlineGain = offlineRate * cappedSec * 0.2 * offlineBoost;
   if (offlineGain > 0) {
-    state.resources.cash += offlineGain;
-    state.totalEarned += offlineGain;
-    toast(`Offline production: +$${fmt(offlineGain)} (${Math.floor(cappedSec / 60)}m capped).`);
+    const repGain = Math.max(0, offlineGain * 0.0005);
+    const partsGain = Math.floor((offlineSec / 300) * (0.3 + state.modifiers.partsChance));
+    const researchGain = Math.floor((offlineSec / 420) * (0.2 + state.modifiers.researchGain));
+    state.offlineReport = {
+      awaySec: offlineSec,
+      cappedSec,
+      cash: offlineGain,
+      rep: repGain,
+      parts: Math.max(0, partsGain),
+      research: Math.max(0, researchGain),
+      boost: offlineBoost
+    };
+    openOfflineSummaryModal();
   }
   state.savedAt = now;
+}
+
+function openOfflineSummaryModal() {
+  if (!state.offlineReport) return;
+  const o = state.offlineReport;
+  activeModal = "offlineSummary";
+  openModal(`
+    <h3>Offline Report</h3>
+    <div class="list">
+      <div class="row"><div class="row-head"><strong>Time Away</strong><span>${Math.floor(o.awaySec / 60)}m</span></div><div class="row-meta"><span>Capped at ${Math.floor(o.cappedSec / 60)}m</span><span>${o.cappedSec < o.awaySec ? "Cap reached" : "Within cap"}</span></div></div>
+      <div class="row"><div class="row-head"><strong>Cash</strong><span>$${fmt(o.cash)}</span></div><div class="row-meta"><span>Offline multiplier x${o.boost.toFixed(2)}</span><span></span></div></div>
+      <div class="row"><div class="row-head"><strong>Bonus Gains</strong><span>+${fmt(o.research)} research • +${fmt(o.parts)} parts • +${fmt(o.rep)} rep</span></div></div>
+    </div>
+    <button class="action-btn claim-btn" id="claimOfflineBtn">Claim Offline Gains</button>
+    <button class="action-btn" id="skipOfflineBtn">Skip</button>
+  `);
+  document.getElementById("claimOfflineBtn")?.addEventListener("click", claimOfflineSummary);
+  document.getElementById("skipOfflineBtn")?.addEventListener("click", () => {
+    state.offlineReport = null;
+    closeModal();
+  });
+}
+
+function claimOfflineSummary() {
+  if (!state.offlineReport) return;
+  const o = state.offlineReport;
+  state.resources.cash += o.cash;
+  state.resources.research += o.research;
+  state.resources.parts += o.parts;
+  state.resources.reputation += o.rep;
+  state.totalEarned += o.cash;
+  toast(`Offline gains claimed: +$${fmt(o.cash)}`);
+  state.offlineReport = null;
+  closeModal();
+  renderAll();
 }
 
 function openSettingsPanel() {
@@ -2411,6 +2686,10 @@ function normalizeState(incoming) {
   if (typeof next.contractXp !== "number") next.contractXp = 0;
   if (typeof next.contractChainDepth !== "number") next.contractChainDepth = 0;
   if (typeof next.contractBossWins !== "number") next.contractBossWins = 0;
+  if (!next.activeChain || typeof next.activeChain !== "object") next.activeChain = null;
+  if (!next.activeRunEvent || typeof next.activeRunEvent !== "object") next.activeRunEvent = null;
+  if (typeof next.runEventNextAt !== "number") next.runEventNextAt = 0;
+  if (!runFocusOptions.some((f) => f.id === next.runFocus)) next.runFocus = null;
   next.skills = (next.skills || []).filter((id) => skillDefs.some((s) => s.id === id));
   if (typeof next.skillPoints !== "number") next.skillPoints = 1;
   if (typeof next.skillXp !== "number") next.skillXp = 0;

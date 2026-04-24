@@ -1752,6 +1752,15 @@ h3, h4 {
   transform: translateY(1px) scale(0.99);
 }
 
+.action-btn.slim {
+  width: auto;
+  margin-top: 0;
+  padding: 6px 10px;
+  min-height: 28px;
+  font-size: 0.66rem;
+  border-radius: 9px;
+}
+
 .ghost-btn {
   border-color: rgba(100, 170, 228, 0.38);
   background: linear-gradient(180deg, rgba(31, 60, 93, 0.86), rgba(23, 45, 73, 0.9));
@@ -1793,6 +1802,18 @@ h3, h4 {
   background: rgba(74, 126, 183, 0.35);
 }
 
+.row.locked {
+  border-color: rgba(132, 163, 194, 0.52);
+  background: linear-gradient(165deg, rgba(21, 35, 55, 0.94), rgba(14, 24, 40, 0.93));
+}
+
+.node-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 6px;
+}
+
 .claim-btn,
 .primary-btn {
   border-color: rgba(255, 201, 96, 0.76);
@@ -1815,6 +1836,11 @@ h3, h4 {
 .node.keystone {
   border-color: rgba(255, 201, 104, 0.68);
   box-shadow: 0 0 0 1px rgba(255, 201, 104, 0.2), 0 0 14px rgba(255, 201, 104, 0.2);
+}
+
+.node.locked {
+  opacity: 0.92;
+  border-color: rgba(110, 146, 182, 0.62);
 }
 
 .contract-card {
