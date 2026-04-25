@@ -3,9 +3,9 @@ const SAVE_KEY = "window_factory_tycoon_v1";
 const RESOURCES = ["cash", "research", "reputation", "parts", "tokens"];
 
 const lineDefs = [
-  { id: "cutter", name: "Frame Cutter", baseCost: 50, baseRate: 0.2, icon: "▦", unlockReq: null },
-  { id: "furnace", name: "Glass Furnace", baseCost: 280, baseRate: 0.29, icon: "◍", unlockReq: { line: "cutter", level: 8 } },
-  { id: "assembler", name: "Assembly Robot", baseCost: 1180, baseRate: 0.39, icon: "◈", unlockReq: { line: "furnace", level: 8 } },
+  { id: "cutter", name: "Frame Cutter", baseCost: 45, baseRate: 0.2, icon: "▦", unlockReq: null },
+  { id: "furnace", name: "Glass Furnace", baseCost: 240, baseRate: 0.29, icon: "◍", unlockReq: { line: "cutter", level: 7 } },
+  { id: "assembler", name: "Assembly Robot", baseCost: 1020, baseRate: 0.39, icon: "◈", unlockReq: { line: "furnace", level: 8 } },
   { id: "qc", name: "Quality Scanner", baseCost: 5100, baseRate: 0.52, icon: "◎", unlockReq: { line: "assembler", level: 7 } },
   { id: "pack", name: "Packaging Bay", baseCost: 26000, baseRate: 0.68, icon: "⬣", unlockReq: { line: "qc", level: 6 } }
 ];
@@ -63,8 +63,8 @@ const divisionDefs = [
 ];
 
 const contractTemplates = [
-  { id: "starter", name: "Neighborhood Retrofit", baseDuration: 170, baseWindows: 110, minRep: 0, failRep: 2, rewards: { cash: 130, rep: 2, parts: 2 }, fragments: 1 },
-  { id: "green", name: "Eco Tower Fitout", baseDuration: 340, baseWindows: 300, minRep: 10, failRep: 3, rewards: { cash: 470, rep: 4, research: 5 }, fragments: 2, special: "research_bonus" },
+  { id: "starter", name: "Neighborhood Retrofit", baseDuration: 150, baseWindows: 95, minRep: 0, failRep: 2, rewards: { cash: 150, rep: 2, parts: 2 }, fragments: 2 },
+  { id: "green", name: "Eco Tower Fitout", baseDuration: 320, baseWindows: 270, minRep: 8, failRep: 3, rewards: { cash: 500, rep: 4, research: 5 }, fragments: 2, special: "research_bonus" },
   { id: "airport", name: "Airport Terminal Rush", baseDuration: 560, baseWindows: 680, minRep: 24, failRep: 4, rewards: { cash: 1250, rep: 7, parts: 9 }, fragments: 3, special: "rush_bonus" },
   { id: "fragile", name: "Fragile Glass Emergency", baseDuration: 430, baseWindows: 540, minRep: 28, failRep: 8, rewards: { cash: 1850, rep: 5, parts: 6 }, fragments: 4, special: "risky_parts" },
   { id: "lux", name: "Luxury Skyline Contract", baseDuration: 980, baseWindows: 1680, minRep: 42, failRep: 6, rewards: { cash: 3850, rep: 11, research: 15, parts: 16 }, fragments: 7, special: "blueprint_fragments_bonus" }
@@ -156,7 +156,7 @@ const modifierPool = [
 ];
 
 const defaultState = () => ({
-  resources: { cash: 60, research: 0, reputation: 0, parts: 0, tokens: 0 },
+  resources: { cash: 75, research: 0, reputation: 0, parts: 0, tokens: 0 },
   lines: Object.fromEntries(lineDefs.map((l) => [l.id, { level: l.id === "cutter" ? 1 : 0 }])),
   divisions: Object.fromEntries(divisionDefs.map((d) => [d.id, false])),
   contract: null,
@@ -192,7 +192,7 @@ const defaultState = () => ({
   skillPoints: 1,
   skillXp: 0,
   skillLevel: 1,
-  nextSkillWindowMilestone: 4000,
+  nextSkillWindowMilestone: 1800,
   blueprints: [],
   blueprintFragments: 0,
   modifiers: {
@@ -628,6 +628,10 @@ function setDrawerOpen(open) {
 
 function setProductionStrategy(mode) {
   if (!["mass", "balanced", "quality", "lean"].includes(mode)) return;
+  if (!isStrategyUnlocked()) {
+    toast("Production modes unlock after your first completed contract.");
+    return;
+  }
   if (state.productionStrategy === mode) return;
   state.productionStrategy = mode;
   document.querySelectorAll("[data-strategy]").forEach((btn) => btn.classList.toggle("active", btn.dataset.strategy === mode));
@@ -635,6 +639,10 @@ function setProductionStrategy(mode) {
   const label = mode === "mass" ? "Mass Production" : mode === "quality" ? "Premium Quality" : mode === "lean" ? "Lean Efficiency" : "Balanced";
   toast(`Strategy set: ${label}`);
   renderAll();
+}
+
+function isStrategyUnlocked() {
+  return state.completedContracts >= 1;
 }
 
 function strategyMultipliers() {
@@ -680,7 +688,7 @@ function gameTick() {
     state.windowsMade += made;
     while (state.windowsMade >= state.nextSkillWindowMilestone) {
       grantSkillXp(1, "production milestone");
-      state.nextSkillWindowMilestone += 4000;
+      state.nextSkillWindowMilestone += 2200 + state.skillLevel * 280;
     }
 
     const cashPerW = Math.max(0, safeNumber(cashPerWindow(), "gameTick:cashPerWindow"));
@@ -702,7 +710,8 @@ function gameTick() {
     tickRiskEvent(now);
     tickChallenge(dt, made);
     tickRunGoal();
-    state.overdrive.charge = Math.min(100, state.overdrive.charge + made * 0.012 * strategyMultipliers().overdriveCharge);
+    const earlyChargeBoost = state.totalEarned < 5000 ? 1.45 : 1;
+    state.overdrive.charge = Math.min(100, state.overdrive.charge + made * 0.012 * strategyMultipliers().overdriveCharge * earlyChargeBoost);
 
     if (now > state.rush.activeUntil && now < state.rush.cooldownUntil) {
       const rem = Math.ceil((state.rush.cooldownUntil - now) / 1000);
@@ -1164,11 +1173,12 @@ function generateContractOffer() {
   const tierRequired = specialType === "Boss" ? Math.max(2, state.contractTier) : Math.max(1, state.contractTier - 1);
   const limited = Math.random() < 0.16 + Math.min(0.12, state.contractTier * 0.015);
   const expiresAt = limited ? Date.now() + (35000 + Math.random() * 35000) : 0;
-  const reqWps = (type === "Bulk" || Math.random() < 0.22) ? Math.max(1, Math.round(calcWindowsPerSec() * (type === "Bulk" ? 1.28 : (1.08 + Math.random() * 0.35)))) : null;
-  const reqStrategy = type === "Premium" ? "quality" : type === "Bulk" ? "mass" : (Math.random() < 0.16 ? (Math.random() < 0.5 ? "quality" : "mass") : null);
-  const reqBlueprint = Math.random() < 0.14 && state.contractTier >= 3
+  const reqWps = state.completedContracts >= 2 && (type === "Bulk" || Math.random() < 0.22) ? Math.max(1, Math.round(calcWindowsPerSec() * (type === "Bulk" ? 1.28 : (1.08 + Math.random() * 0.35)))) : null;
+  const reqStrategy = state.completedContracts >= 3 ? (type === "Premium" ? "quality" : type === "Bulk" ? "mass" : (Math.random() < 0.16 ? (Math.random() < 0.5 ? "quality" : "mass") : null)) : null;
+  const reqBlueprint = Math.random() < 0.14 && state.contractTier >= 3 && state.completedContracts >= 5
     ? blueprintDefs[Math.floor(Math.random() * blueprintDefs.length)]?.id
     : null;
+  const bottleneckReq = state.contractTier >= 2 && state.completedContracts >= 4 && (type === "Premium" || Math.random() < 0.1) ? Math.floor(28 + Math.random() * 18) : null;
   const valueScore = rewards.cash + fragments * 120 + rewards.research * 60;
   const rarityTier = valueScore > 9000 ? "S" : valueScore > 5000 ? "A" : valueScore > 2400 ? "B" : "C";
   return {
@@ -1661,7 +1671,7 @@ function convertResearch() {
 }
 
 function modernizationCost() {
-  return 120000 * Math.pow(1.72, state.modernizationCount);
+  return 100000 * Math.pow(1.72, state.modernizationCount);
 }
 
 function calcRunEfficiency(stats = state) {
@@ -2074,13 +2084,13 @@ function tickChallenge(dt, made) {
 }
 
 function tickRiskEvent(now) {
-  if (!state.riskEventNextAt) state.riskEventNextAt = now + 240000;
+  if (!state.riskEventNextAt) state.riskEventNextAt = now + 480000;
   if (activeModal || state.contract || now < state.riskEventNextAt) return;
   if (Math.random() > 0.2) {
-    state.riskEventNextAt = now + 240000 + Math.random() * 180000;
+    state.riskEventNextAt = now + 360000 + Math.random() * 240000;
     return;
   }
-  state.riskEventNextAt = now + 240000 + Math.random() * 180000;
+  state.riskEventNextAt = now + 360000 + Math.random() * 240000;
   const event = Math.random() < 0.5
     ? {
       title: "Cheap Supplier",
@@ -2421,7 +2431,11 @@ function getMilestoneGoal() {
 }
 
 function renderFactory() {
-  document.querySelectorAll("[data-strategy]").forEach((btn) => btn.classList.toggle("active", btn.dataset.strategy === state.productionStrategy));
+  const strategyUnlocked = isStrategyUnlocked();
+  document.querySelectorAll("[data-strategy]").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.strategy === state.productionStrategy);
+    btn.disabled = !strategyUnlocked && btn.dataset.strategy !== "balanced";
+  });
   const synergyPct = Math.round(calcLineSynergyBonus() * 100);
   el.lineList.innerHTML = lineDefs.map((line) => {
     const lv = state.lines[line.id].level;
@@ -3143,4 +3157,3 @@ function fmt(n) {
   if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
   return n.toFixed(n < 10 ? 2 : 1);
 }
-  const bottleneckReq = state.contractTier >= 2 && (type === "Premium" || Math.random() < 0.1) ? Math.floor(28 + Math.random() * 18) : null;
