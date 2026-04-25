@@ -1954,3 +1954,32 @@ h3, h4 {
     width: fit-content;
   }
 }
+
+body.low-perf *,
+body.reduced-motion * {
+  filter: none !important;
+}
+
+body.low-perf .topbar,
+body.low-perf .bottom-nav,
+body.low-perf .modal,
+body.low-perf .side-menu {
+  backdrop-filter: none !important;
+}
+
+body.low-perf .factory-links path,
+body.low-perf .ready-pulse,
+body.low-perf .completion-burst,
+body.low-perf .money-pop,
+body.low-perf .reward-pop {
+  animation: none !important;
+}
+
+body.low-perf .card,
+body.low-perf .row,
+body.low-perf .res-pill,
+body.low-perf .action-btn,
+body.low-perf .machine,
+body.low-perf .tab.active {
+  box-shadow: none !important;
+}

@@ -294,6 +294,8 @@ let uiRefreshTimer = 0;
 let lastGameLoopErrorAt = 0;
 let lastStateValidationAt = 0;
 let overdriveReadyNotified = false;
+let lastMoneyPopAt = 0;
+let lastRewardPopupAt = 0;
 const repairWarningState = { lastAt: 0, count: 0 };
 
 const el = {
@@ -782,7 +784,8 @@ function maybeSpawnClaimEvent(dt) {
 
 function refreshDynamicViews(dt) {
   uiRefreshTimer += dt;
-  if (uiRefreshTimer < 0.4) return;
+  const refreshInterval = state.settings.lowPerf ? 0.65 : (state.settings.reducedMotion ? 0.5 : 0.4);
+  if (uiRefreshTimer < refreshInterval) return;
   uiRefreshTimer = 0;
 
   const activeScreen = document.querySelector(".screen.active")?.id || "";
@@ -2670,6 +2673,7 @@ function bootstrapFactoryVisual() {
 
 function animateFlow() {
   if (!state.settings.animations) return;
+  if (state.settings.lowPerf) return;
   const activeLines = lineDefs.filter((l) => state.lines[l.id].level > 0).length;
   if (!activeLines) return;
   const links = [
@@ -2736,6 +2740,11 @@ function spawnMoneyPop(amountPerSec, boosted = false) {
   if (!el.fxLayer) return;
   if (!state.settings.showFloatingNumbers) return;
   if (!state.settings.animations) return;
+  if (state.settings.lowPerf || state.settings.reducedMotion) return;
+  const now = Date.now();
+  if (now - lastMoneyPopAt < 550) return;
+  if (el.fxLayer.childElementCount > 20) return;
+  lastMoneyPopAt = now;
   const pop = document.createElement("div");
   pop.className = `money-pop ${boosted ? "boost" : ""}`;
   pop.textContent = `+$${fmt(amountPerSec)}/s`;
@@ -2769,6 +2778,10 @@ function spawnTickPop(x, y) {
 function showRewardPopup(text) {
   if (!el.fxLayer) return;
   if (!state.settings.animations) return;
+  if (state.settings.lowPerf || state.settings.reducedMotion) return;
+  const now = Date.now();
+  if (now - lastRewardPopupAt < 250) return;
+  lastRewardPopupAt = now;
   const pop = document.createElement("div");
   pop.className = "reward-pop";
   pop.textContent = text;
@@ -2913,6 +2926,7 @@ function applySettingsToUI() {
   document.body.classList.toggle("compact-ui", !!state.settings.compactUi);
   document.body.classList.toggle("animations-off", !state.settings.animations);
   document.body.classList.toggle("reduced-motion", !!state.settings.reducedMotion);
+  document.body.classList.toggle("low-perf", !!state.settings.lowPerf);
   const glow = { low: "0.7", medium: "1", high: "1.25" }[state.settings.glowIntensity] || "1";
   document.documentElement.style.setProperty("--glow-mul", glow);
 }
@@ -2980,6 +2994,7 @@ function closeModal() {
 
 function autoSave() {
   try {
+    if (document.hidden && Date.now() - (state.savedAt || 0) < 30000) return;
     validateGameState("autosave");
     state.savedAt = Date.now();
     localStorage.setItem(SAVE_KEY, JSON.stringify(state));
