@@ -74,6 +74,7 @@ const contractTypes = {
   Standard: { durationMul: 1, rewardMul: 1, windowsMul: 1, repBonus: 0, fragmentMul: 1, riskPenaltyChance: 0, reqRepMul: 1 },
   Rush: { durationMul: 0.68, rewardMul: 1.22, windowsMul: 1.1, repBonus: 1, fragmentMul: 0.85, riskPenaltyChance: 0, reqRepMul: 1.2 },
   Premium: { durationMul: 1.35, rewardMul: 1.42, windowsMul: 1.25, repBonus: 2, fragmentMul: 1.65, riskPenaltyChance: 0, reqRepMul: 1.25 },
+  Bulk: { durationMul: 1.2, rewardMul: 1.28, windowsMul: 1.5, repBonus: 1, fragmentMul: 0.9, riskPenaltyChance: 0, reqRepMul: 1.18 },
   Risky: { durationMul: 0.92, rewardMul: 1.5, windowsMul: 1.12, repBonus: 0, fragmentMul: 1.15, riskPenaltyChance: 0.24, reqRepMul: 1.1 }
 };
 
@@ -107,31 +108,31 @@ const skillDefs = [
   { id: "prod_2", name: "Cut Precision", branch: "Production", tier: 2, cost: 2, type: "small", prereq: "prod_1", desc: "+4% production speed", effect: () => state.modifiers.prod += 0.04 },
   { id: "prod_3", name: "Furnace Pressure", branch: "Production", tier: 3, cost: 3, type: "medium", prereq: "prod_2", desc: "+10% production speed", effect: () => state.modifiers.prod += 0.1 },
   { id: "prod_4", name: "Output Mix", branch: "Production", tier: 4, cost: 4, type: "notable", prereq: "prod_2", desc: "+10% cash/window", effect: () => state.modifiers.cashBonus += 0.1 },
-  { id: "prod_5", name: "Keystone: Overdrive Protocol", branch: "Production", tier: 5, cost: 6, type: "keystone", prereq: "prod_3", desc: "▲ +42% production & stronger line milestones ▼ -28% contract rewards and +12% fail penalty", effect: () => { state.modifiers.prod += 0.42; state.modifiers.lineMilestonePower += 0.2; state.modifiers.contractReward -= 0.28; state.modifiers.contractFailurePenaltyMul += 0.12; } },
+  { id: "prod_5", name: "Keystone: Overdrive Protocol", branch: "Production", tier: 5, cost: 6, type: "keystone", prereq: "prod_3", desc: "▲ +50% production and +25% overdrive charge ▼ -25% contract rewards", effect: () => { state.modifiers.prod += 0.5; state.modifiers.lineMilestonePower += 0.18; state.modifiers.contractReward -= 0.25; } },
 
   { id: "auto_1", name: "Autoload Arms", branch: "Automation", tier: 1, cost: 1, type: "small", desc: "+5% offline efficiency", effect: () => state.modifiers.offlineEfficiency += 0.05 },
   { id: "auto_2", name: "Sensor Mesh", branch: "Automation", tier: 2, cost: 2, type: "small", prereq: "auto_1", desc: "+4% part recovery chance", effect: () => state.modifiers.partsChance += 0.04 },
   { id: "auto_3", name: "Queued Dispatch", branch: "Automation", tier: 3, cost: 3, type: "medium", prereq: "auto_2", desc: "+12% offline efficiency", effect: () => state.modifiers.offlineEfficiency += 0.12 },
   { id: "auto_4", name: "Maintenance AI", branch: "Automation", tier: 4, cost: 4, type: "notable", prereq: "auto_2", desc: "-10% line costs", effect: () => state.modifiers.costDiscount += 0.1 },
-  { id: "auto_5", name: "Keystone: Night Shift Grid", branch: "Automation", tier: 5, cost: 6, type: "keystone", prereq: "auto_3", desc: "▲ +52% offline and -8% contract duration ▼ -18% active production", effect: () => { state.modifiers.offlineEfficiency += 0.52; state.modifiers.contractDurationMul -= 0.08; state.modifiers.activeProductionPenalty += 0.18; } },
+  { id: "auto_5", name: "Keystone: Night Shift Grid", branch: "Automation", tier: 5, cost: 6, type: "keystone", prereq: "auto_3", desc: "▲ +100% offline earnings ▼ -20% boost power", effect: () => { state.modifiers.offlineEfficiency += 1; state.modifiers.activeProductionPenalty += 0.06; state.modifiers.rushPower -= 0.2; } },
 
   { id: "con_1", name: "Client Briefing", branch: "Contracts", tier: 1, cost: 1, type: "small", desc: "+5% contract rewards", effect: () => state.modifiers.contractReward += 0.05 },
   { id: "con_2", name: "Sales Cadence", branch: "Contracts", tier: 2, cost: 2, type: "small", prereq: "con_1", desc: "+5% contract rewards", effect: () => state.modifiers.contractReward += 0.05 },
   { id: "con_3", name: "Premium Clauses", branch: "Contracts", tier: 3, cost: 3, type: "medium", prereq: "con_2", desc: "+12% premium and +8% VIP contract rewards", effect: () => { state.modifiers.premiumContractReward += 0.12; state.modifiers.vipContractReward += 0.08; } },
   { id: "con_4", name: "Rapid Negotiation", branch: "Contracts", tier: 4, cost: 4, type: "notable", prereq: "con_2", desc: "-10% contract duration", effect: () => state.modifiers.contractDurationMul -= 0.1 },
-  { id: "con_5", name: "Keystone: All-In Brokerage", branch: "Contracts", tier: 5, cost: 6, type: "keystone", prereq: "con_3", desc: "▲ +78% contract rewards and chain mastery ▼ +40% duration and -14% production", effect: () => { state.modifiers.contractReward += 0.78; state.modifiers.contractDurationMul += 0.4; state.modifiers.prod -= 0.14; state.flags.chainMastery = true; } },
+  { id: "con_5", name: "Keystone: All-In Brokerage", branch: "Contracts", tier: 5, cost: 6, type: "keystone", prereq: "con_3", desc: "▲ +50% contract rewards and chain mastery ▼ +25% contract duration", effect: () => { state.modifiers.contractReward += 0.5; state.modifiers.contractDurationMul += 0.25; state.flags.chainMastery = true; } },
 
   { id: "eco_1", name: "Tax Timing", branch: "Economy", tier: 1, cost: 1, type: "small", desc: "+4% cash/window", effect: () => state.modifiers.cashBonus += 0.04 },
   { id: "eco_2", name: "Bulk Negotiation", branch: "Economy", tier: 2, cost: 2, type: "small", prereq: "eco_1", desc: "-4% line costs", effect: () => state.modifiers.costDiscount += 0.04 },
   { id: "eco_3", name: "Capital Rotation", branch: "Economy", tier: 3, cost: 3, type: "medium", prereq: "eco_2", desc: "+10% cash/window", effect: () => state.modifiers.cashBonus += 0.1 },
   { id: "eco_4", name: "Margin Controls", branch: "Economy", tier: 4, cost: 4, type: "notable", prereq: "eco_2", desc: "-10% line costs", effect: () => state.modifiers.costDiscount += 0.1 },
-  { id: "eco_5", name: "Keystone: Profit Doctrine", branch: "Economy", tier: 5, cost: 6, type: "keystone", prereq: "eco_3", desc: "▲ +24% cash, -14% costs, resist economy soft cap ▼ -28% fragment gains", effect: () => { state.modifiers.cashBonus += 0.24; state.modifiers.costDiscount += 0.14; state.modifiers.economicPressureResist += 0.18; state.modifiers.fragmentGain -= 0.28; } },
+  { id: "eco_5", name: "Keystone: Profit Doctrine", branch: "Economy", tier: 5, cost: 6, type: "keystone", prereq: "eco_3", desc: "▲ -18% costs and +20% cash ▼ -20% fragment gains", effect: () => { state.modifiers.cashBonus += 0.2; state.modifiers.costDiscount += 0.18; state.modifiers.economicPressureResist += 0.14; state.modifiers.fragmentGain -= 0.2; } },
 
   { id: "qual_1", name: "Optic Calibration", branch: "Quality", tier: 1, cost: 1, type: "small", desc: "+5% reputation gain", effect: () => state.modifiers.reputationGain += 0.05 },
   { id: "qual_2", name: "Defect Catchers", branch: "Quality", tier: 2, cost: 2, type: "small", prereq: "qual_1", desc: "+4% part recovery chance", effect: () => state.modifiers.partsChance += 0.04 },
   { id: "qual_3", name: "Seal Inspection", branch: "Quality", tier: 3, cost: 3, type: "medium", prereq: "qual_2", desc: "-12% contract fail reputation loss", effect: () => state.modifiers.contractFailurePenaltyMul -= 0.12 },
   { id: "qual_4", name: "Premium Standard", branch: "Quality", tier: 4, cost: 4, type: "notable", prereq: "qual_2", desc: "+10% contract rewards", effect: () => state.modifiers.contractReward += 0.1 },
-  { id: "qual_5", name: "Keystone: Zero Defect Pledge", branch: "Quality", tier: 5, cost: 6, type: "keystone", prereq: "qual_3", desc: "▲ +22% rep, +12% parts, boss specialist ▼ -18% cash/window", effect: () => { state.modifiers.reputationGain += 0.22; state.modifiers.partsChance += 0.12; state.modifiers.cashBonus -= 0.18; state.flags.bossBreaker = true; } },
+  { id: "qual_5", name: "Keystone: Zero Defect Pledge", branch: "Quality", tier: 5, cost: 6, type: "keystone", prereq: "qual_3", desc: "▲ +60% premium rewards and +20% reputation ▼ -20% bulk output", effect: () => { state.modifiers.premiumContractReward += 0.6; state.modifiers.reputationGain += 0.2; state.modifiers.prod -= 0.08; state.flags.bossBreaker = true; } },
 
   { id: "work_1", name: "Shift Meals", branch: "Workforce", tier: 1, cost: 1, type: "small", desc: "+4% rush power", effect: () => state.modifiers.rushPower += 0.04 },
   { id: "work_2", name: "Safety Program", branch: "Workforce", tier: 2, cost: 2, type: "small", prereq: "work_1", desc: "-5% fail reputation loss", effect: () => state.modifiers.contractFailurePenaltyMul -= 0.05 },
@@ -169,6 +170,7 @@ const defaultState = () => ({
   contractStreak: 0,
   bestContractStreak: 0,
   completedContracts: 0,
+  premiumContractsCompleted: 0,
   activeChain: null,
   chests: { common: 0, rare: 0, epic: 0, legendary: 0 },
   claimedMilestones: [],
@@ -234,6 +236,7 @@ const defaultState = () => ({
   },
   runState: {
     firstContractBonusPending: true,
+    firstContractSpeedPending: true,
     firstUpgradeDiscountPending: true,
     rushOrdersUsed: 0
   },
@@ -436,6 +439,7 @@ function validateGameState(reason = "runtime") {
   state.rush.cooldownUntil = clampNonNegative(state.rush.cooldownUntil, defaults.rush.cooldownUntil, "rush.cooldownUntil");
   state.runState = { ...defaults.runState, ...(state.runState || {}) };
   state.runState.firstContractBonusPending = !!state.runState.firstContractBonusPending;
+  state.runState.firstContractSpeedPending = !!state.runState.firstContractSpeedPending;
   state.runState.firstUpgradeDiscountPending = !!state.runState.firstUpgradeDiscountPending;
   state.runState.rushOrdersUsed = Math.floor(clampNonNegative(state.runState.rushOrdersUsed, 0, "runState.rushOrdersUsed"));
 
@@ -446,11 +450,13 @@ function validateGameState(reason = "runtime") {
   state.contractBossWins = Math.floor(clampNonNegative(state.contractBossWins, 0, "contractBossWins"));
   state.contractStreak = Math.floor(clampNonNegative(state.contractStreak, 0, "contractStreak"));
   state.bestContractStreak = Math.floor(clampNonNegative(state.bestContractStreak, 0, "bestContractStreak"));
+  state.premiumContractsCompleted = Math.floor(clampNonNegative(state.premiumContractsCompleted, 0, "premiumContractsCompleted"));
   if (!state.activeChain || typeof state.activeChain !== "object") state.activeChain = null;
   if (!state.activeRunEvent || typeof state.activeRunEvent !== "object") state.activeRunEvent = null;
   if (state.activeRunEvent && !Number.isFinite(Number(state.activeRunEvent.until))) state.activeRunEvent = null;
   state.runEventNextAt = clampNonNegative(state.runEventNextAt, 0, "runEventNextAt");
   if (!runFocusOptions.some((f) => f.id === state.runFocus)) state.runFocus = null;
+  if (!["mass", "balanced", "quality", "lean"].includes(state.productionStrategy)) state.productionStrategy = "balanced";
   if (!state.runGoal || typeof state.runGoal !== "object") state.runGoal = null;
   if (!state.machineSpecs || typeof state.machineSpecs !== "object") {
     state.machineSpecs = Object.fromEntries(lineDefs.map((l) => [l.id, { t10: null, t25: null }]));
@@ -621,19 +627,21 @@ function setDrawerOpen(open) {
 }
 
 function setProductionStrategy(mode) {
-  if (!["mass", "balanced", "quality"].includes(mode)) return;
+  if (!["mass", "balanced", "quality", "lean"].includes(mode)) return;
   if (state.productionStrategy === mode) return;
   state.productionStrategy = mode;
   document.querySelectorAll("[data-strategy]").forEach((btn) => btn.classList.toggle("active", btn.dataset.strategy === mode));
   recalculateProgressionEffects();
-  toast(`Strategy set: ${mode === "mass" ? "Mass Production" : mode === "quality" ? "Premium Quality" : "Balanced"}`);
+  const label = mode === "mass" ? "Mass Production" : mode === "quality" ? "Premium Quality" : mode === "lean" ? "Lean Efficiency" : "Balanced";
+  toast(`Strategy set: ${label}`);
   renderAll();
 }
 
 function strategyMultipliers() {
-  if (state.productionStrategy === "mass") return { prod: 1.12, rep: 0.85, contract: 0.94, frag: 0.95 };
-  if (state.productionStrategy === "quality") return { prod: 0.92, rep: 1.15, contract: 1.08, frag: 1.1 };
-  return { prod: 1, rep: 1, contract: 1, frag: 1 };
+  if (state.productionStrategy === "mass") return { prod: 1.12, rep: 0.85, contract: 0.94, frag: 0.95, costMul: 1, partsMul: 1, overdriveCharge: 1.15, rushPowerMul: 1, bottleneckTolerance: 1 };
+  if (state.productionStrategy === "quality") return { prod: 0.92, rep: 1.15, contract: 1.08, frag: 1.1, costMul: 1, partsMul: 1, overdriveCharge: 1, rushPowerMul: 1, bottleneckTolerance: 0.88 };
+  if (state.productionStrategy === "lean") return { prod: 0.96, rep: 1, contract: 0.98, frag: 1, costMul: 0.92, partsMul: 1.15, overdriveCharge: 0.9, rushPowerMul: 0.88, bottleneckTolerance: 1.05 };
+  return { prod: 1, rep: 1, contract: 1, frag: 1, costMul: 1, partsMul: 1, overdriveCharge: 1, rushPowerMul: 1, bottleneckTolerance: 1 };
 }
 
 function bottleneckAnalysis() {
@@ -680,12 +688,13 @@ function gameTick() {
     state.resources.cash = Math.max(0, safeNumber(state.resources.cash + cashGain, "gameTick:cashTotal"));
     state.totalEarned = Math.max(0, safeNumber(state.totalEarned + cashGain, "gameTick:totalEarned"));
 
-    if (Math.random() < (0.03 + safeNumber(state.modifiers.partsChance, "gameTick:partsChance")) * dt) {
+    if (Math.random() < (0.03 + safeNumber(state.modifiers.partsChance, "gameTick:partsChance")) * strategyMultipliers().partsMul * dt) {
       state.resources.parts = Math.max(0, safeNumber(state.resources.parts + 1, "gameTick:parts"));
       if (Math.random() < 0.12) toast("Industrial part recovered.");
     }
 
-    state.resources.reputation = Math.max(0, safeNumber(state.resources.reputation + made * 0.0009 * (1 + safeNumber(state.modifiers.reputationGain, "gameTick:repGain")) * strategyMultipliers().rep, "gameTick:reputation"));
+    const qualityBpRep = state.productionStrategy === "quality" && state.blueprints.includes("bp_glass") ? 1.06 : 1;
+    state.resources.reputation = Math.max(0, safeNumber(state.resources.reputation + made * 0.0009 * (1 + safeNumber(state.modifiers.reputationGain, "gameTick:repGain")) * strategyMultipliers().rep * qualityBpRep, "gameTick:reputation"));
 
     tickContract(dt, made);
     tickModifier(now);
@@ -693,7 +702,7 @@ function gameTick() {
     tickRiskEvent(now);
     tickChallenge(dt, made);
     tickRunGoal();
-    state.overdrive.charge = Math.min(100, state.overdrive.charge + made * 0.02);
+    state.overdrive.charge = Math.min(100, state.overdrive.charge + made * 0.02 * strategyMultipliers().overdriveCharge);
 
     if (now > state.rush.activeUntil && now < state.rush.cooldownUntil) {
       const rem = Math.ceil((state.rush.cooldownUntil - now) / 1000);
@@ -709,6 +718,7 @@ function gameTick() {
       el.rushBtn.classList.remove("ready-pulse");
       el.rushBtn.textContent = `Boosting (${rem}s)`;
       el.rushStatus.textContent = `Rush active (${rem}s).`;
+      if (state.blueprints.includes("bp_assembly") && Math.random() < 0.08 * dt) state.resources.parts += 1;
     } else {
       el.rushBtn.disabled = false;
       el.rushBtn.classList.add("ready");
@@ -856,7 +866,7 @@ function calcWindowsPerSec() {
   const divBoost = 1 + divisionDefs.filter((d) => state.divisions[d.id]).reduce((a, d) => a + d.bonus, 0);
   const skillBoost = 1 + state.modifiers.prod;
   const tokenBoost = 1 + state.resources.tokens * 0.018;
-  const rushBoost = Date.now() < state.rush.activeUntil ? 1.55 + state.modifiers.rushPower : 1;
+  const rushBoost = Date.now() < state.rush.activeUntil ? 1.55 + state.modifiers.rushPower * strategyMultipliers().rushPowerMul : 1;
   const startupBoost = 1 + state.metaUpgrades.startupMomentum * (state.totalEarned < 20000 ? 0.018 : 0.01);
   const calibrationBoost = 1 + state.metaUpgrades.lineCalibration * 0.015;
   const activePenalty = 1 - Math.min(0.4, state.modifiers.activeProductionPenalty);
@@ -897,6 +907,7 @@ function getActiveBoostValue(kind) {
 function lineUpgradeCost(line) {
   const lv = state.lines[line.id].level;
   let discount = 1 - Math.min(0.18, state.modifiers.costDiscount);
+  discount *= strategyMultipliers().costMul;
   if (state.activeRunEvent?.costMul) discount *= state.activeRunEvent.costMul;
   discount *= 1 - Math.min(0.2, state.metaUpgrades.costEngineering * 0.01);
   if (state.flags.bpFirstUpgradeDiscount && state.runState.firstUpgradeDiscountPending) discount *= 0.82;
@@ -906,6 +917,7 @@ function lineUpgradeCost(line) {
 
 function lineUpgradeCostAtLevel(line, level) {
   let discount = 1 - Math.min(0.18, state.modifiers.costDiscount);
+  discount *= strategyMultipliers().costMul;
   if (state.activeRunEvent?.costMul) discount *= state.activeRunEvent.costMul;
   discount *= 1 - Math.min(0.2, state.metaUpgrades.costEngineering * 0.01);
   if (state.flags.bpFirstUpgradeDiscount && state.runState.firstUpgradeDiscountPending) discount *= 0.82;
@@ -1102,7 +1114,9 @@ function generateContractOffer() {
   if (chained) return chained;
   const template = contractTemplates[Math.floor(Math.random() * contractTemplates.length)];
   const typeNames = Object.keys(contractTypes);
-  const type = typeNames[Math.floor(Math.random() * typeNames.length)];
+  let type = typeNames[Math.floor(Math.random() * typeNames.length)];
+  if (state.productionStrategy === "mass" && Math.random() < 0.35) type = "Bulk";
+  if (state.productionStrategy === "quality" && Math.random() < 0.28) type = "Premium";
   const typeCfg = contractTypes[type];
   const modPack = {
     durationMul: typeCfg.durationMul,
@@ -1150,8 +1164,8 @@ function generateContractOffer() {
   const tierRequired = specialType === "Boss" ? Math.max(2, state.contractTier) : Math.max(1, state.contractTier - 1);
   const limited = Math.random() < 0.16 + Math.min(0.12, state.contractTier * 0.015);
   const expiresAt = limited ? Date.now() + (35000 + Math.random() * 35000) : 0;
-  const reqWps = Math.random() < 0.22 ? Math.max(1, Math.round(calcWindowsPerSec() * (1.1 + Math.random() * 0.45))) : null;
-  const reqStrategy = Math.random() < 0.16 ? (Math.random() < 0.5 ? "quality" : "mass") : null;
+  const reqWps = (type === "Bulk" || Math.random() < 0.22) ? Math.max(1, Math.round(calcWindowsPerSec() * (type === "Bulk" ? 1.35 : (1.1 + Math.random() * 0.45)))) : null;
+  const reqStrategy = type === "Premium" ? "quality" : type === "Bulk" ? "mass" : (Math.random() < 0.16 ? (Math.random() < 0.5 ? "quality" : "mass") : null);
   const reqBlueprint = Math.random() < 0.14 && state.contractTier >= 3
     ? blueprintDefs[Math.floor(Math.random() * blueprintDefs.length)]?.id
     : null;
@@ -1179,6 +1193,7 @@ function generateContractOffer() {
     requiredWps: reqWps,
     requiredStrategy: reqStrategy,
     requiredBlueprint: reqBlueprint,
+    requiredBottleneck: bottleneckReq,
     riskPenaltyChance: typeCfg.riskPenaltyChance + (specialType === "Boss" ? 0.04 : 0),
     chainMeta: null
   };
@@ -1229,6 +1244,7 @@ function startContract(id) {
   if (c.requiredWps && calcWindowsPerSec() < c.requiredWps) return;
   if (c.requiredStrategy && state.productionStrategy !== c.requiredStrategy) return;
   if (c.requiredBlueprint && !state.blueprints.includes(c.requiredBlueprint)) return;
+  if (c.requiredBottleneck && bottleneckAnalysis().severity > c.requiredBottleneck * strategyMultipliers().bottleneckTolerance) return;
   state.contract = {
     ...c,
     targetWindows: c.windows,
@@ -1239,6 +1255,11 @@ function startContract(id) {
     status: "active",
     rewardGranted: false
   };
+  if (state.blueprints.includes("bp_thermal") && state.runState.firstContractSpeedPending) {
+    state.contract.remaining = Math.ceil(state.contract.remaining * 0.75);
+    state.runState.firstContractSpeedPending = false;
+    showRewardPopup("Blueprint: first contract starts 25% faster");
+  }
   state.contractBoard = state.contractBoard.filter((x) => x.id !== id);
   ensureContractBoard();
   state.contractContext.rushUsed = false;
@@ -1336,6 +1357,13 @@ function claimContractReward() {
   grantSkillXp(1 + (c.type === "Premium" ? 1 : 0), "contract completion");
 
   state.completedContracts += 1;
+  if (c.type === "Premium") {
+    state.premiumContractsCompleted += 1;
+    if (state.blueprints.includes("bp_finish") && state.premiumContractsCompleted % 5 === 0) {
+      state.blueprintFragments += 3;
+      showRewardPopup("Blueprint cycle: +3 fragments (every 5th premium)");
+    }
+  }
   state.contractStreak += 1;
   state.bestContractStreak = Math.max(state.bestContractStreak, state.contractStreak);
   if (c.specialType === "Chain") {
@@ -2312,7 +2340,18 @@ function renderHUD() {
     el.missionProgress.style.width = `${pct}%`;
   }
   if (el.missionHint) {
-    const hint = goalReady ? "Goal ready" : (eta < 90 ? "Close to next upgrade" : "Build income");
+    let hint = goalReady ? "Goal ready" : (eta < 90 ? "Close to next upgrade" : "Build income");
+    if (state.runGoal && !state.runGoal.completed) {
+      const g = state.runGoal;
+      const progress = g.id === "contract"
+        ? state.completedContracts - (g.startContracts || 0)
+        : g.id === "production"
+          ? calcWindowsPerSec()
+          : g.id === "blueprint"
+            ? state.blueprintFragments - (g.startFragments || 0)
+            : calcModernizationReward();
+      hint = `Run goal: ${fmt(Math.max(0, progress))}/${fmt(g.target)}`;
+    }
     el.missionHint.textContent = hint;
   }
   const bottleneck = bottleneckAnalysis();
@@ -2446,7 +2485,8 @@ function renderContracts() {
     const wpsLock = c.requiredWps && calcWindowsPerSec() < c.requiredWps;
     const strategyLock = c.requiredStrategy && c.requiredStrategy !== state.productionStrategy;
     const blueprintLock = c.requiredBlueprint && !state.blueprints.includes(c.requiredBlueprint);
-    const statusText = tierLock ? `Tier ${c.tierRequired}` : (lock ? "Rep locked" : (lineLock || wpsLock || strategyLock || blueprintLock ? "Req locked" : "Ready"));
+    const bottleneckLock = c.requiredBottleneck && bottleneckAnalysis().severity > c.requiredBottleneck * strategyMultipliers().bottleneckTolerance;
+    const statusText = tierLock ? `Tier ${c.tierRequired}` : (lock ? "Rep locked" : (lineLock || wpsLock || strategyLock || blueprintLock || bottleneckLock ? "Req locked" : "Ready"));
     const special = c.modifiers?.length ? c.modifiers[0] : "Standard terms";
     const typeClass = `type-${c.type.toLowerCase()}`;
     const specialBadge = c.specialType ? `<span>${c.specialType}</span>` : `<span>${c.type}</span>`;
@@ -2462,8 +2502,9 @@ function renderContracts() {
       ${c.requiredWps ? `<div class="row-meta"><span>Need ${fmt(c.requiredWps)} w/s</span><span>${wpsLock ? "Not reached" : "Reached"}</span></div>` : ""}
       ${c.requiredStrategy ? `<div class="row-meta"><span>Need strategy: ${c.requiredStrategy === "quality" ? "Premium Quality" : "Mass Production"}</span><span>${strategyLock ? "Mismatch" : "Matched"}</span></div>` : ""}
       ${c.requiredBlueprint ? `<div class="row-meta"><span>Need blueprint: ${blueprintDefs.find((bp) => bp.id === c.requiredBlueprint)?.name || c.requiredBlueprint}</span><span>${blueprintLock ? "Missing" : "Owned"}</span></div>` : ""}
+      ${c.requiredBottleneck ? `<div class="row-meta"><span>Need bottleneck under ${c.requiredBottleneck}%</span><span>${bottleneckLock ? "Too constrained" : "Within limit"}</span></div>` : ""}
       <div class="row-meta"><span>Tier ${c.tierRequired || 1}</span><button class="action-btn slim" data-contract-detail="${c.id}">Details</button></div>
-      ${(!lock && !tierLock && !lineLock && !wpsLock && !strategyLock && !blueprintLock && !state.contract) ? `<button class="action-btn ${nearExpiry ? "ready-pulse" : ""}" data-contract="${c.id}">Start</button>` : ""}
+      ${(!lock && !tierLock && !lineLock && !wpsLock && !strategyLock && !blueprintLock && !bottleneckLock && !state.contract) ? `<button class="action-btn ${nearExpiry ? "ready-pulse" : ""}" data-contract="${c.id}">Start</button>` : ""}
     </div>`;
   }).join("");
 
@@ -3058,6 +3099,7 @@ function normalizeState(incoming) {
   if (typeof next.contractBossWins !== "number") next.contractBossWins = 0;
   if (typeof next.contractStreak !== "number") next.contractStreak = 0;
   if (typeof next.bestContractStreak !== "number") next.bestContractStreak = 0;
+  if (typeof next.premiumContractsCompleted !== "number") next.premiumContractsCompleted = 0;
   if (!next.activeChain || typeof next.activeChain !== "object") next.activeChain = null;
   if (!next.activeRunEvent || typeof next.activeRunEvent !== "object") next.activeRunEvent = null;
   if (next.activeRunEvent && !Number.isFinite(Number(next.activeRunEvent.until))) next.activeRunEvent = null;
@@ -3069,7 +3111,7 @@ function normalizeState(incoming) {
   });
   if (!next.overdrive || typeof next.overdrive !== "object") next.overdrive = { charge: 0, streak: 0 };
   if (typeof next.productionStrategy !== "string") next.productionStrategy = "balanced";
-  if (!["mass", "balanced", "quality"].includes(next.productionStrategy)) next.productionStrategy = "balanced";
+  if (!["mass", "balanced", "quality", "lean"].includes(next.productionStrategy)) next.productionStrategy = "balanced";
   if (!next.runGoal || typeof next.runGoal !== "object") next.runGoal = null;
   next.skills = (next.skills || []).filter((id) => skillDefs.some((s) => s.id === id));
   if (typeof next.skillPoints !== "number") next.skillPoints = 1;
@@ -3101,3 +3143,4 @@ function fmt(n) {
   if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
   return n.toFixed(n < 10 ? 2 : 1);
 }
+  const bottleneckReq = type === "Premium" || Math.random() < 0.12 ? Math.floor(25 + Math.random() * 20) : null;
