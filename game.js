@@ -32,6 +32,29 @@ const softEventPool = [
   { id: "export_rush", text: "Export Rush", duration: 300, contractSpeedMul: 1.1 }
 ];
 
+const machineSpecDefs = {
+  cutter: {
+    t10: [{ id: "fast_frames", label: "Faster Frames", desc: "+6% cutter output" }, { id: "cheap_frames", label: "Cheaper Frames", desc: "-6% cutter upgrade cost" }, { id: "premium_frames", label: "Premium Frames", desc: "+4% contract rewards" }],
+    t25: [{ id: "precision_feed", label: "Precision Feed", desc: "+5% furnace output" }, { id: "throughput_feed", label: "Throughput Feed", desc: "+4% global production" }, { id: "stable_frames", label: "Stable Frames", desc: "+6% reputation gain" }]
+  },
+  furnace: {
+    t10: [{ id: "more_glass", label: "More Glass", desc: "+7% furnace output" }, { id: "quality_glass", label: "Quality Glass", desc: "+5% contract rewards" }, { id: "fragment_fumes", label: "Fragment Fumes", desc: "+4% fragment chance" }],
+    t25: [{ id: "thermal_sync", label: "Thermal Sync", desc: "+5% assembler output" }, { id: "energy_saver", label: "Energy Saver", desc: "-4% all line costs" }, { id: "premium_burn", label: "Premium Burn", desc: "+6% premium contract rewards" }]
+  },
+  assembler: {
+    t10: [{ id: "fast_assembly", label: "Faster Assembly", desc: "+7% assembler output" }, { id: "offline_assembly", label: "Offline Assembly", desc: "+8% offline earnings" }, { id: "contract_eff", label: "Contract Efficiency", desc: "-5% contract duration" }],
+    t25: [{ id: "smart_routing", label: "Smart Routing", desc: "+6% qc output" }, { id: "rush_link", label: "Rush Link", desc: "+8% rush power" }, { id: "quality_fit", label: "Quality Fit", desc: "+5% rep gain" }]
+  },
+  qc: {
+    t10: [{ id: "fast_qc", label: "Fast QC", desc: "+6% qc output" }, { id: "client_trust", label: "Client Trust", desc: "+6% contract rewards" }, { id: "fail_guard", label: "Fail Guard", desc: "-8% fail penalties" }],
+    t25: [{ id: "package_sync", label: "Package Sync", desc: "+6% pack output" }, { id: "reputation_boost", label: "Reputation Boost", desc: "+8% reputation gain" }, { id: "reward_scan", label: "Reward Scan", desc: "+5% fragment gain" }]
+  },
+  pack: {
+    t10: [{ id: "fast_pack", label: "Fast Pack", desc: "+6% pack output" }, { id: "vip_pack", label: "VIP Pack", desc: "+6% VIP rewards" }, { id: "safe_pack", label: "Safe Pack", desc: "-4% contract failure loss" }],
+    t25: [{ id: "export_pack", label: "Export Pack", desc: "+6% contract cash" }, { id: "parts_recovery", label: "Parts Recovery", desc: "+6% parts chance" }, { id: "frag_seal", label: "Fragment Seal", desc: "+4% fragment gain" }]
+  }
+};
+
 const divisionDefs = [
   { id: "residential", name: "Residential Unit", reqCash: 900, bonus: 0.06 },
   { id: "commercial", name: "Commercial Unit", reqCash: 8200, bonus: 0.09 },
@@ -154,7 +177,15 @@ const defaultState = () => ({
   activeRunEvent: null,
   runEventNextAt: 0,
   runFocus: null,
+  runGoal: null,
   offlineReport: null,
+  productionStrategy: "balanced",
+  machineSpecs: Object.fromEntries(lineDefs.map((l) => [l.id, { t10: null, t25: null }])),
+  activeChallenge: null,
+  challengeHistory: { completed: 0 },
+  overdrive: { charge: 0, streak: 0 },
+  milestoneStreak: 0,
+  riskEventNextAt: 0,
   skills: [],
   skillPoints: 1,
   skillXp: 0,
@@ -281,6 +312,8 @@ const el = {
   rushStatus: document.getElementById("rushStatus"),
   missionProgress: document.getElementById("missionProgress"),
   missionHint: document.getElementById("missionHint"),
+  bottleneckChip: document.getElementById("bottleneckChip"),
+  challengeChip: document.getElementById("challengeChip"),
   rpsLabel: document.getElementById("rpsLabel"),
   wpsLabel: document.getElementById("wpsLabel"),
   cashFocus: document.getElementById("cashFocus"),
@@ -418,6 +451,15 @@ function validateGameState(reason = "runtime") {
   if (state.activeRunEvent && !Number.isFinite(Number(state.activeRunEvent.until))) state.activeRunEvent = null;
   state.runEventNextAt = clampNonNegative(state.runEventNextAt, 0, "runEventNextAt");
   if (!runFocusOptions.some((f) => f.id === state.runFocus)) state.runFocus = null;
+  if (!state.runGoal || typeof state.runGoal !== "object") state.runGoal = null;
+  if (!state.machineSpecs || typeof state.machineSpecs !== "object") {
+    state.machineSpecs = Object.fromEntries(lineDefs.map((l) => [l.id, { t10: null, t25: null }]));
+  }
+  lineDefs.forEach((l) => {
+    if (!state.machineSpecs[l.id]) state.machineSpecs[l.id] = { t10: null, t25: null };
+    state.machineSpecs[l.id].t10 = typeof state.machineSpecs[l.id].t10 === "string" ? state.machineSpecs[l.id].t10 : null;
+    state.machineSpecs[l.id].t25 = typeof state.machineSpecs[l.id].t25 === "string" ? state.machineSpecs[l.id].t25 : null;
+  });
 
   state.skillPoints = Math.floor(clampNonNegative(state.skillPoints, defaults.skillPoints, "skillPoints"));
   state.skillXp = clampNonNegative(state.skillXp, defaults.skillXp, "skillXp");
@@ -550,6 +592,9 @@ function bindEvents() {
       renderFactory();
     });
   });
+  document.querySelectorAll("[data-strategy]").forEach((btn) => {
+    btn.addEventListener("click", () => setProductionStrategy(btn.dataset.strategy));
+  });
 
   el.modalLayer?.addEventListener("click", (e) => {
     if (e.target === el.modalLayer) closeModal();
@@ -573,6 +618,38 @@ function setDrawerOpen(open) {
   document.getElementById("menuButton")?.setAttribute("aria-expanded", drawerOpen ? "true" : "false");
   el.drawerOverlay?.classList.toggle("open", drawerOpen);
   document.body.classList.toggle("drawer-open", drawerOpen);
+}
+
+function setProductionStrategy(mode) {
+  if (!["mass", "balanced", "quality"].includes(mode)) return;
+  if (state.productionStrategy === mode) return;
+  state.productionStrategy = mode;
+  document.querySelectorAll("[data-strategy]").forEach((btn) => btn.classList.toggle("active", btn.dataset.strategy === mode));
+  recalculateProgressionEffects();
+  toast(`Strategy set: ${mode === "mass" ? "Mass Production" : mode === "quality" ? "Premium Quality" : "Balanced"}`);
+  renderAll();
+}
+
+function strategyMultipliers() {
+  if (state.productionStrategy === "mass") return { prod: 1.12, rep: 0.85, contract: 0.94, frag: 0.95 };
+  if (state.productionStrategy === "quality") return { prod: 0.92, rep: 1.15, contract: 1.08, frag: 1.1 };
+  return { prod: 1, rep: 1, contract: 1, frag: 1 };
+}
+
+function bottleneckAnalysis() {
+  const chain = ["cutter", "furnace", "assembler", "qc", "pack"];
+  const outputs = chain.map((id) => {
+    const line = lineDefs.find((l) => l.id === id);
+    const lv = state.lines[id].level;
+    const val = lv > 0 ? line.baseRate * lv * (1 + Math.sqrt(lv) * 0.03) : 0;
+    return { id, name: line.name, val };
+  });
+  const active = outputs.filter((o) => o.val > 0);
+  if (!active.length) return { text: "Bottleneck: establish first line", severity: 0 };
+  const max = Math.max(...active.map((o) => o.val));
+  const min = active.sort((a, b) => a.val - b.val)[0];
+  const pct = max <= 0 ? 0 : Math.round((1 - min.val / max) * 100);
+  return { text: `Bottleneck: ${min.name} limiting output by ${pct}%`, severity: pct, lineId: min.id };
 }
 
 function gameTick() {
@@ -608,11 +685,15 @@ function gameTick() {
       if (Math.random() < 0.12) toast("Industrial part recovered.");
     }
 
-    state.resources.reputation = Math.max(0, safeNumber(state.resources.reputation + made * 0.0009 * (1 + safeNumber(state.modifiers.reputationGain, "gameTick:repGain")), "gameTick:reputation"));
+    state.resources.reputation = Math.max(0, safeNumber(state.resources.reputation + made * 0.0009 * (1 + safeNumber(state.modifiers.reputationGain, "gameTick:repGain")) * strategyMultipliers().rep, "gameTick:reputation"));
 
     tickContract(dt, made);
     tickModifier(now);
     tickRunEvent(now);
+    tickRiskEvent(now);
+    tickChallenge(dt, made);
+    tickRunGoal();
+    state.overdrive.charge = Math.min(100, state.overdrive.charge + made * 0.02);
 
     if (now > state.rush.activeUntil && now < state.rush.cooldownUntil) {
       const rem = Math.ceil((state.rush.cooldownUntil - now) / 1000);
@@ -632,7 +713,7 @@ function gameTick() {
       el.rushBtn.disabled = false;
       el.rushBtn.classList.add("ready");
       el.rushBtn.classList.add("ready-pulse");
-      el.rushBtn.textContent = "Boost Production";
+      el.rushBtn.textContent = `Boost Production (${Math.floor(state.overdrive.charge)}%)`;
       const dur = Math.round((5000 + state.modifiers.rushDuration * 1000) / 1000);
       el.rushStatus.textContent = `${dur}s overclock • 32s cooldown`;
     }
@@ -759,6 +840,14 @@ function calcWindowsPerSec() {
       if (line.id === "assembler" && state.lines.furnace.level >= 25) localBoost *= 1.06;
       if (line.id === "qc" && state.lines.assembler.level >= 25) localBoost *= 1.08;
       if (line.id === "pack" && state.lines.qc.level >= 10) localBoost *= 1.05;
+      const spec = state.machineSpecs?.[line.id] || {};
+      if ((line.id === "cutter" && spec.t10 === "fast_frames") || (line.id === "furnace" && spec.t10 === "more_glass")
+        || (line.id === "assembler" && spec.t10 === "fast_assembly") || (line.id === "qc" && spec.t10 === "fast_qc")
+        || (line.id === "pack" && spec.t10 === "fast_pack")) localBoost *= 1.06;
+      if ((line.id === "furnace" && state.machineSpecs?.cutter?.t25 === "precision_feed")
+        || (line.id === "assembler" && state.machineSpecs?.furnace?.t25 === "thermal_sync")
+        || (line.id === "qc" && state.machineSpecs?.assembler?.t25 === "smart_routing")
+        || (line.id === "pack" && state.machineSpecs?.qc?.t25 === "package_sync")) localBoost *= 1.05;
       const milestoneMul = getLineMilestoneMultiplier(lv);
       wps += safeNumber(line.baseRate * lv * localBoost * milestoneMul, `calcWindowsPerSec:${line.id}`);
     }
@@ -782,7 +871,7 @@ function calcWindowsPerSec() {
   const specialization = getMetaSpecialization();
   const specializationBoost = specialization === "Production" ? 1.09 : 1;
   const tempProdBoost = 1 + getActiveBoostValue("prod");
-  const total = wps * divBoost * skillBoost * tokenBoost * rushBoost * modifierMul * startupBoost * calibrationBoost * activePenalty * synergyBoost * specializationBoost * tempProdBoost;
+  const total = wps * divBoost * skillBoost * tokenBoost * rushBoost * modifierMul * startupBoost * calibrationBoost * activePenalty * synergyBoost * specializationBoost * tempProdBoost * strategyMultipliers().prod;
   return Math.max(0, safeNumber(total, "calcWindowsPerSec:total", {
     wps, divBoost, skillBoost, tokenBoost, rushBoost, modifierMul, startupBoost, calibrationBoost, activePenalty, synergyBoost, specializationBoost, tempProdBoost
   }));
@@ -886,10 +975,41 @@ function buyLine(lineId, qtyRequest = 1) {
       if (step >= 25) state.resources.parts += 2 + lineMilestones.indexOf(step);
     }
   }
+  maybeOfferMachineSpecialization(lineId, startLv, state.lines[lineId].level);
   flashMachine(lineId);
   toast(`${def.name} upgraded +${plan.qty} to Lv ${state.lines[lineId].level}`);
   validateGameState("buyLine");
   renderAll();
+}
+
+function maybeOfferMachineSpecialization(lineId, fromLv, toLv) {
+  if (!state.machineSpecs?.[lineId]) return;
+  if (fromLv < 10 && toLv >= 10 && !state.machineSpecs[lineId].t10) {
+    openMachineSpecPicker(lineId, "t10");
+    return;
+  }
+  if (fromLv < 25 && toLv >= 25 && !state.machineSpecs[lineId].t25) {
+    openMachineSpecPicker(lineId, "t25");
+  }
+}
+
+function openMachineSpecPicker(lineId, tierKey) {
+  const line = lineDefs.find((l) => l.id === lineId);
+  const options = machineSpecDefs[lineId]?.[tierKey] || [];
+  if (!line || !options.length) return;
+  openModal(`
+    <h3>${line.name} Specialization</h3>
+    <p>Choose one specialization for ${tierKey === "t10" ? "Level 10" : "Level 25"}.</p>
+    <div class="list">${options.map((opt) => `<div class="row"><div class="row-head"><strong>${opt.label}</strong><span></span></div><div class="row-meta"><span>${opt.desc}</span><button class="action-btn slim" data-spec-pick="${lineId}|${tierKey}|${opt.id}">Choose</button></div></div>`).join("")}</div>
+  `);
+  document.querySelectorAll("[data-spec-pick]").forEach((btn) => btn.addEventListener("click", () => {
+    const [lineIdPicked, tierPicked, specId] = btn.dataset.specPick.split("|");
+    state.machineSpecs[lineIdPicked][tierPicked] = specId;
+    recalculateProgressionEffects();
+    closeModal();
+    toast(`${lineDefs.find((l) => l.id === lineIdPicked)?.name} specialization selected.`);
+    renderAll();
+  }));
 }
 
 function unlockDivision(id) {
@@ -905,6 +1025,10 @@ function unlockDivision(id) {
 
 function activateRush() {
   const now = Date.now();
+  if ((state.overdrive?.charge || 0) < 100) {
+    toast("Overdrive not ready yet.");
+    return;
+  }
   if (now < state.rush.cooldownUntil) return;
   const duration = 5000 + state.modifiers.rushDuration * 1000;
   const cdPenalty = state.activeModifier?.rushCdAdd ? state.activeModifier.rushCdAdd * 1000 : 0;
@@ -912,6 +1036,12 @@ function activateRush() {
   const darkShiftPenalty = state.flags.darkShift ? 3000 : 0;
   state.rush.cooldownUntil = now + 32000 + cdPenalty + darkShiftPenalty;
   state.runState.rushOrdersUsed += 1;
+  state.overdrive.charge = 0;
+  state.overdrive.streak = (state.overdrive.streak || 0) + 1;
+  if (state.overdrive.streak % 3 === 0) {
+    state.resources.parts += 2;
+    toast("Overdrive streak bonus: +2 parts.");
+  }
   if (state.flags.bpRushPartsBonus && state.runState.rushOrdersUsed % 10 === 0) {
     state.resources.parts += 5;
     showRewardPopup("Blueprint cycle bonus: +5 parts");
@@ -1020,6 +1150,11 @@ function generateContractOffer() {
   const tierRequired = specialType === "Boss" ? Math.max(2, state.contractTier) : Math.max(1, state.contractTier - 1);
   const limited = Math.random() < 0.16 + Math.min(0.12, state.contractTier * 0.015);
   const expiresAt = limited ? Date.now() + (35000 + Math.random() * 35000) : 0;
+  const reqWps = Math.random() < 0.22 ? Math.max(1, Math.round(calcWindowsPerSec() * (1.1 + Math.random() * 0.45))) : null;
+  const reqStrategy = Math.random() < 0.16 ? (Math.random() < 0.5 ? "quality" : "mass") : null;
+  const reqBlueprint = Math.random() < 0.14 && state.contractTier >= 3
+    ? blueprintDefs[Math.floor(Math.random() * blueprintDefs.length)]?.id
+    : null;
   const valueScore = rewards.cash + fragments * 120 + rewards.research * 60;
   const rarityTier = valueScore > 9000 ? "S" : valueScore > 5000 ? "A" : valueScore > 2400 ? "B" : "C";
   return {
@@ -1041,6 +1176,9 @@ function generateContractOffer() {
     special: template.special || null,
     modifiers: [`Focus: ${rewardFocus}`, ...mods.map((m) => m.text)],
     requiredLine: modPack.requiredLine,
+    requiredWps: reqWps,
+    requiredStrategy: reqStrategy,
+    requiredBlueprint: reqBlueprint,
     riskPenaltyChance: typeCfg.riskPenaltyChance + (specialType === "Boss" ? 0.04 : 0),
     chainMeta: null
   };
@@ -1088,6 +1226,9 @@ function startContract(id) {
   if (state.resources.reputation < c.minRep) return;
   if ((c.tierRequired || 1) > state.contractTier) return;
   if (c.requiredLine && state.lines[c.requiredLine.id].level < c.requiredLine.level) return;
+  if (c.requiredWps && calcWindowsPerSec() < c.requiredWps) return;
+  if (c.requiredStrategy && state.productionStrategy !== c.requiredStrategy) return;
+  if (c.requiredBlueprint && !state.blueprints.includes(c.requiredBlueprint)) return;
   state.contract = {
     ...c,
     targetWindows: c.windows,
@@ -1157,6 +1298,7 @@ function claimContractReward() {
   if (c.specialType === "Boss" && state.flags.bossBreaker) mult += 0.15;
   if (c.specialType === "Chain" && state.flags.chainMastery) mult += Math.min(0.22, state.contractChainDepth * 0.04);
   mult *= 1 + getContractStreakBonus();
+  mult *= strategyMultipliers().contract;
   if (state.activeRunEvent?.contractRewardMul) mult *= state.activeRunEvent.contractRewardMul;
   if (c.type === "Risky" && Math.random() < (c.riskPenaltyChance || 0)) {
     mult *= 0.72;
@@ -1179,7 +1321,7 @@ function claimContractReward() {
   const intelligenceBonus = state.metaUpgrades.fragmentMagnet * 0.05;
   const refinementBonus = state.metaUpgrades.fragmentRefining * 0.03;
   const fragmentMul = Math.max(0.2, state.modifiers.fragmentGain);
-  let fragGain = Math.max(0, Math.round((c.fragmentReward || 0) * (1 + intelligenceBonus + refinementBonus) * fragmentMul));
+  let fragGain = Math.max(0, Math.round((c.fragmentReward || 0) * (1 + intelligenceBonus + refinementBonus) * fragmentMul * strategyMultipliers().frag));
   if (c.specialType === "VIP") fragGain += 1;
   if (c.specialType === "Boss") fragGain += 2;
   if (state.flags.adaptiveBlueprints && c.specialType) fragGain += 1;
@@ -1343,6 +1485,7 @@ function recalculateProgressionEffects() {
   state.modifiers.vipContractReward += (state.metaUpgrades.strategyContracts || 0) * 0.015;
   state.modifiers.economicPressureResist += (state.metaUpgrades.strategyBlueprints || 0) * 0.01;
   applyLineMilestoneBonuses();
+  applyMachineSpecializationEffects();
 }
 
 function applyLineMilestoneBonuses() {
@@ -1399,6 +1542,24 @@ function applyLineMilestoneBonuses() {
     state.modifiers.prod += 0.15;
     state.modifiers.contractReward += 0.08;
   }
+}
+
+function applyMachineSpecializationEffects() {
+  const specs = Object.values(state.machineSpecs || {}).flatMap((x) => [x?.t10, x?.t25]).filter(Boolean);
+  specs.forEach((id) => {
+    if (id === "premium_frames" || id === "quality_glass" || id === "client_trust") state.modifiers.contractReward += 0.04;
+    if (id === "cheap_frames" || id === "energy_saver") state.modifiers.costDiscount += 0.04;
+    if (id === "fragment_fumes" || id === "reward_scan" || id === "frag_seal") state.modifiers.rareFragmentChance += 0.04;
+    if (id === "offline_assembly") state.modifiers.offlineEfficiency += 0.08;
+    if (id === "contract_eff") state.modifiers.contractDurationMul -= 0.05;
+    if (id === "rush_link") state.modifiers.rushPower += 0.08;
+    if (id === "fail_guard" || id === "safe_pack") state.modifiers.contractFailurePenaltyMul -= 0.08;
+    if (id === "reputation_boost" || id === "stable_frames" || id === "quality_fit") state.modifiers.reputationGain += 0.06;
+    if (id === "vip_pack" || id === "premium_burn") state.modifiers.vipContractReward += 0.06;
+    if (id === "parts_recovery") state.modifiers.partsChance += 0.06;
+    if (id === "throughput_feed") state.modifiers.prod += 0.04;
+    if (id === "export_pack") state.modifiers.cashBonus += 0.06;
+  });
 }
 
 function skillXpToNext(level) {
@@ -1650,8 +1811,33 @@ function openRunFocusPicker() {
   document.querySelectorAll("[data-run-focus]").forEach((btn) => btn.addEventListener("click", () => {
     state.runFocus = btn.dataset.runFocus;
     recalculateProgressionEffects();
+    openRunGoalPicker();
+  }));
+}
+
+function openRunGoalPicker() {
+  const goals = [
+    { id: "contract", label: "Contract Run", desc: "Complete 6 contracts", target: 6 },
+    { id: "production", label: "Production Run", desc: "Reach 40 w/s", target: 40 },
+    { id: "blueprint", label: "Blueprint Run", desc: "Earn 18 fragments", target: 18 },
+    { id: "speed", label: "Speed Run", desc: "Reach modernization reward 4", target: 4 }
+  ];
+  openModal(`
+    <h3>Run Goal</h3>
+    <p>Pick one optional run goal for a bonus chest + tokens.</p>
+    <div class="list">${goals.map((g) => `<div class="row"><div class="row-head"><strong>${g.label}</strong><span>${g.desc}</span></div><div class="row-meta"><span></span><button class="action-btn slim" data-run-goal="${g.id}|${g.target}">Select</button></div></div>`).join("")}</div>
+  `);
+  document.querySelectorAll("[data-run-goal]").forEach((btn) => btn.addEventListener("click", () => {
+    const [id, targetStr] = btn.dataset.runGoal.split("|");
+    state.runGoal = {
+      id,
+      target: Number(targetStr),
+      startContracts: state.completedContracts,
+      startFragments: state.blueprintFragments,
+      completed: false
+    };
     closeModal();
-    toast(`Run focus set: ${runFocusOptions.find((f) => f.id === state.runFocus)?.label}`);
+    toast(`Run focus set: ${runFocusOptions.find((f) => f.id === state.runFocus)?.label}. Goal selected.`);
     renderAll();
   }));
 }
@@ -1799,6 +1985,114 @@ function tickRunEvent(now) {
     toast(`Run event: ${e.text}`);
   }
   state.runEventNextAt = now + (150000 + Math.random() * 150000);
+}
+
+function getChallengePool() {
+  return [
+    { id: "prod_3m", label: "Produce 900 windows in 3m", duration: 180, target: 900, type: "windows", reward: { cash: 700, parts: 2, fragments: 1 } },
+    { id: "contracts_2", label: "Complete 2 contracts in 6m", duration: 360, target: 2, type: "contracts", reward: { cash: 900, reputation: 4, fragments: 1 } },
+    { id: "cash_noboost", label: "Earn $2.2K without boost in 3m", duration: 180, target: 2200, type: "cashNoBoost", reward: { cash: 1200, research: 3 } }
+  ];
+}
+
+function spawnChallenge() {
+  if (state.activeChallenge) return;
+  const def = getChallengePool()[Math.floor(Math.random() * getChallengePool().length)];
+  state.activeChallenge = {
+    ...def,
+    startedAt: Date.now(),
+    until: Date.now() + def.duration * 1000,
+    progress: 0,
+    startContracts: state.completedContracts,
+    startCash: state.totalEarned,
+    startRushUsed: state.runState.rushOrdersUsed
+  };
+}
+
+function tickChallenge(dt, made) {
+  if (!state.activeChallenge) {
+    if (Math.random() < dt * 0.01) spawnChallenge();
+    return;
+  }
+  const c = state.activeChallenge;
+  if (c.type === "windows") c.progress += made;
+  if (c.type === "contracts") c.progress = Math.max(0, state.completedContracts - c.startContracts);
+  if (c.type === "cashNoBoost") {
+    if (state.runState.rushOrdersUsed > c.startRushUsed) {
+      toast("Challenge failed: boost used.");
+      state.activeChallenge = null;
+      return;
+    }
+    c.progress = Math.max(0, state.totalEarned - c.startCash);
+  }
+  if (c.progress >= c.target) {
+    applyRewardPayload({ cash: c.reward.cash || 0, research: c.reward.research || 0, fragments: c.reward.fragments || 0 });
+    if (c.reward.reputation) state.resources.reputation += c.reward.reputation;
+    state.challengeHistory.completed = (state.challengeHistory.completed || 0) + 1;
+    state.milestoneStreak = (state.milestoneStreak || 0) + 1;
+    if (state.milestoneStreak % 4 === 0) {
+      state.resources.parts += 3;
+      toast("Challenge streak: +3 parts");
+    }
+    showRewardPopup(`Challenge complete: ${c.label}`);
+    state.activeChallenge = null;
+    return;
+  }
+  if (Date.now() >= c.until) {
+    state.milestoneStreak = 0;
+    toast(`Challenge expired: ${c.label}`);
+    state.activeChallenge = null;
+  }
+}
+
+function tickRiskEvent(now) {
+  if (!state.riskEventNextAt) state.riskEventNextAt = now + 240000;
+  if (activeModal || now < state.riskEventNextAt) return;
+  if (Math.random() > 0.28) {
+    state.riskEventNextAt = now + 240000 + Math.random() * 180000;
+    return;
+  }
+  state.riskEventNextAt = now + 240000 + Math.random() * 180000;
+  const event = Math.random() < 0.5
+    ? {
+      title: "Cheap Supplier",
+      text: "Take -12% upgrade costs for 2m, but -8% reputation gain.",
+      accept: () => { state.activeRunEvent = { id: "supplier", text: "Cheap Supplier", until: now + 120000, costMul: 0.88 }; state.resources.reputation = Math.max(0, state.resources.reputation - 2); }
+    }
+    : {
+      title: "Energy Surge",
+      text: "Take +12% production for 90s, but rush cooldown +8s.",
+      accept: () => { state.activeRunEvent = { id: "energy", text: "Energy Surge", until: now + 90000, prodMul: 1.12 }; state.rush.cooldownUntil += 8000; }
+    };
+  openModal(`
+    <h3>${event.title}</h3>
+    <p>${event.text}</p>
+    <button class="action-btn" id="acceptRiskEvent">Accept</button>
+    <button class="action-btn" id="declineRiskEvent">Skip</button>
+  `);
+  document.getElementById("acceptRiskEvent")?.addEventListener("click", () => {
+    event.accept();
+    closeModal();
+    toast(`${event.title} activated.`);
+  });
+  document.getElementById("declineRiskEvent")?.addEventListener("click", closeModal);
+}
+
+function tickRunGoal() {
+  const g = state.runGoal;
+  if (!g || g.completed) return;
+  let progress = 0;
+  if (g.id === "contract") progress = state.completedContracts - (g.startContracts || 0);
+  if (g.id === "production") progress = calcWindowsPerSec();
+  if (g.id === "blueprint") progress = state.blueprintFragments - (g.startFragments || 0);
+  if (g.id === "speed") progress = calcModernizationReward();
+  if (progress >= g.target) {
+    g.completed = true;
+    state.resources.tokens += 1;
+    state.chests.rare = (state.chests.rare || 0) + 1;
+    showRewardPopup("Run goal complete: +1 token + Rare chest");
+    toast("Run goal completed.");
+  }
 }
 
 function showStats() {
@@ -2021,6 +2315,16 @@ function renderHUD() {
     const hint = goalReady ? "Goal ready" : (eta < 90 ? "Close to next upgrade" : "Build income");
     el.missionHint.textContent = hint;
   }
+  const bottleneck = bottleneckAnalysis();
+  if (el.bottleneckChip) el.bottleneckChip.textContent = bottleneck.text;
+  if (el.challengeChip) {
+    const c = state.activeChallenge;
+    if (!c) el.challengeChip.textContent = "Challenge: standby";
+    else {
+      const left = Math.max(0, Math.ceil((c.until - Date.now()) / 1000));
+      el.challengeChip.textContent = `Challenge: ${c.label} (${fmt(Math.min(c.target, c.progress))}/${fmt(c.target)} • ${left}s)`;
+    }
+  }
   if (goalReady && !goalReadyLastTick) {
     toast("Goal ready: next upgrade is affordable.");
   }
@@ -2078,6 +2382,7 @@ function getMilestoneGoal() {
 }
 
 function renderFactory() {
+  document.querySelectorAll("[data-strategy]").forEach((btn) => btn.classList.toggle("active", btn.dataset.strategy === state.productionStrategy));
   const synergyPct = Math.round(calcLineSynergyBonus() * 100);
   el.lineList.innerHTML = lineDefs.map((line) => {
     const lv = state.lines[line.id].level;
@@ -2138,7 +2443,10 @@ function renderContracts() {
     const lock = state.resources.reputation < c.minRep;
     const tierLock = (c.tierRequired || 1) > state.contractTier;
     const lineLock = c.requiredLine && state.lines[c.requiredLine.id].level < c.requiredLine.level;
-    const statusText = tierLock ? `Tier ${c.tierRequired}` : (lock ? "Rep locked" : (lineLock ? "Line locked" : "Ready"));
+    const wpsLock = c.requiredWps && calcWindowsPerSec() < c.requiredWps;
+    const strategyLock = c.requiredStrategy && c.requiredStrategy !== state.productionStrategy;
+    const blueprintLock = c.requiredBlueprint && !state.blueprints.includes(c.requiredBlueprint);
+    const statusText = tierLock ? `Tier ${c.tierRequired}` : (lock ? "Rep locked" : (lineLock || wpsLock || strategyLock || blueprintLock ? "Req locked" : "Ready"));
     const special = c.modifiers?.length ? c.modifiers[0] : "Standard terms";
     const typeClass = `type-${c.type.toLowerCase()}`;
     const specialBadge = c.specialType ? `<span>${c.specialType}</span>` : `<span>${c.type}</span>`;
@@ -2151,8 +2459,11 @@ function renderContracts() {
       <div class="row-meta"><span>$${fmt(c.rewards.cash)} • +${c.fragmentReward || 0} frags</span><span>${statusText}</span></div>
       <div class="row-meta"><span>${special}</span><span>Fail -${c.failRep} rep</span></div>
       ${c.requiredLine ? `<div class="row-meta"><span>Requires ${lineDefs.find((l) => l.id === c.requiredLine.id)?.name || "Line"} Lv ${c.requiredLine.level}</span><span></span></div>` : ""}
+      ${c.requiredWps ? `<div class="row-meta"><span>Need ${fmt(c.requiredWps)} w/s</span><span>${wpsLock ? "Not reached" : "Reached"}</span></div>` : ""}
+      ${c.requiredStrategy ? `<div class="row-meta"><span>Need strategy: ${c.requiredStrategy === "quality" ? "Premium Quality" : "Mass Production"}</span><span>${strategyLock ? "Mismatch" : "Matched"}</span></div>` : ""}
+      ${c.requiredBlueprint ? `<div class="row-meta"><span>Need blueprint: ${blueprintDefs.find((bp) => bp.id === c.requiredBlueprint)?.name || c.requiredBlueprint}</span><span>${blueprintLock ? "Missing" : "Owned"}</span></div>` : ""}
       <div class="row-meta"><span>Tier ${c.tierRequired || 1}</span><button class="action-btn slim" data-contract-detail="${c.id}">Details</button></div>
-      ${(!lock && !tierLock && !lineLock && !state.contract) ? `<button class="action-btn ${nearExpiry ? "ready-pulse" : ""}" data-contract="${c.id}">Start</button>` : ""}
+      ${(!lock && !tierLock && !lineLock && !wpsLock && !strategyLock && !blueprintLock && !state.contract) ? `<button class="action-btn ${nearExpiry ? "ready-pulse" : ""}" data-contract="${c.id}">Start</button>` : ""}
     </div>`;
   }).join("");
 
@@ -2752,6 +3063,14 @@ function normalizeState(incoming) {
   if (next.activeRunEvent && !Number.isFinite(Number(next.activeRunEvent.until))) next.activeRunEvent = null;
   if (typeof next.runEventNextAt !== "number") next.runEventNextAt = 0;
   if (!runFocusOptions.some((f) => f.id === next.runFocus)) next.runFocus = null;
+  if (!next.machineSpecs || typeof next.machineSpecs !== "object") next.machineSpecs = Object.fromEntries(lineDefs.map((l) => [l.id, { t10: null, t25: null }]));
+  lineDefs.forEach((l) => {
+    if (!next.machineSpecs[l.id]) next.machineSpecs[l.id] = { t10: null, t25: null };
+  });
+  if (!next.overdrive || typeof next.overdrive !== "object") next.overdrive = { charge: 0, streak: 0 };
+  if (typeof next.productionStrategy !== "string") next.productionStrategy = "balanced";
+  if (!["mass", "balanced", "quality"].includes(next.productionStrategy)) next.productionStrategy = "balanced";
+  if (!next.runGoal || typeof next.runGoal !== "object") next.runGoal = null;
   next.skills = (next.skills || []).filter((id) => skillDefs.some((s) => s.id === id));
   if (typeof next.skillPoints !== "number") next.skillPoints = 1;
   if (typeof next.skillXp !== "number") next.skillXp = 0;

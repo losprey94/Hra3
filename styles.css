@@ -1777,6 +1777,44 @@ h3, h4 {
   background: rgba(8, 22, 42, 0.72);
 }
 
+.strategy-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  border: 1px solid rgba(121, 176, 234, 0.45);
+  background: rgba(8, 24, 46, 0.75);
+}
+
+.strategy-btn {
+  border: 0;
+  min-width: 44px;
+  height: 26px;
+  border-radius: 7px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: #9dc3e6;
+  background: transparent;
+}
+
+.strategy-btn.active {
+  color: #032133;
+  background: linear-gradient(180deg, #ffe08d, #f2b95d);
+}
+
+.state-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(101, 181, 247, 0.45);
+  background: rgba(11, 31, 58, 0.72);
+  color: #bfe2ff;
+  font-size: 0.58rem;
+  line-height: 1.1;
+}
+
 .bulk-btn {
   border: 0;
   min-width: 38px;
