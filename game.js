@@ -4,9 +4,9 @@ const RESOURCES = ["cash", "research", "reputation", "parts", "tokens"];
 
 const lineDefs = [
   { id: "cutter", name: "Frame Cutter", baseCost: 50, baseRate: 0.2, icon: "▦", unlockReq: null },
-  { id: "furnace", name: "Glass Furnace", baseCost: 300, baseRate: 0.29, icon: "◍", unlockReq: { line: "cutter", level: 9 } },
-  { id: "assembler", name: "Assembly Robot", baseCost: 1300, baseRate: 0.39, icon: "◈", unlockReq: { line: "furnace", level: 8 } },
-  { id: "qc", name: "Quality Scanner", baseCost: 5600, baseRate: 0.52, icon: "◎", unlockReq: { line: "assembler", level: 7 } },
+  { id: "furnace", name: "Glass Furnace", baseCost: 280, baseRate: 0.29, icon: "◍", unlockReq: { line: "cutter", level: 8 } },
+  { id: "assembler", name: "Assembly Robot", baseCost: 1180, baseRate: 0.39, icon: "◈", unlockReq: { line: "furnace", level: 8 } },
+  { id: "qc", name: "Quality Scanner", baseCost: 5100, baseRate: 0.52, icon: "◎", unlockReq: { line: "assembler", level: 7 } },
   { id: "pack", name: "Packaging Bay", baseCost: 26000, baseRate: 0.68, icon: "⬣", unlockReq: { line: "qc", level: 6 } }
 ];
 
@@ -143,6 +143,8 @@ const defaultState = () => ({
   contractXp: 0,
   contractChainDepth: 0,
   contractBossWins: 0,
+  contractStreak: 0,
+  bestContractStreak: 0,
   completedContracts: 0,
   activeChain: null,
   chests: { common: 0, rare: 0, epic: 0, legendary: 0 },
@@ -409,8 +411,11 @@ function validateGameState(reason = "runtime") {
   state.completedContracts = Math.floor(clampNonNegative(state.completedContracts, 0, "completedContracts"));
   state.contractChainDepth = Math.floor(clampNonNegative(state.contractChainDepth, 0, "contractChainDepth"));
   state.contractBossWins = Math.floor(clampNonNegative(state.contractBossWins, 0, "contractBossWins"));
+  state.contractStreak = Math.floor(clampNonNegative(state.contractStreak, 0, "contractStreak"));
+  state.bestContractStreak = Math.floor(clampNonNegative(state.bestContractStreak, 0, "bestContractStreak"));
   if (!state.activeChain || typeof state.activeChain !== "object") state.activeChain = null;
   if (!state.activeRunEvent || typeof state.activeRunEvent !== "object") state.activeRunEvent = null;
+  if (state.activeRunEvent && !Number.isFinite(Number(state.activeRunEvent.until))) state.activeRunEvent = null;
   state.runEventNextAt = clampNonNegative(state.runEventNextAt, 0, "runEventNextAt");
   if (!runFocusOptions.some((f) => f.id === state.runFocus)) state.runFocus = null;
 
@@ -749,7 +754,11 @@ function calcWindowsPerSec() {
   lineDefs.forEach((line) => {
     const lv = state.lines[line.id].level;
     if (lv > 0) {
-      const localBoost = 1 + Math.sqrt(lv) * 0.03;
+      let localBoost = 1 + Math.sqrt(lv) * 0.03;
+      if (line.id === "furnace" && state.lines.cutter.level >= 10) localBoost *= 1.05;
+      if (line.id === "assembler" && state.lines.furnace.level >= 25) localBoost *= 1.06;
+      if (line.id === "qc" && state.lines.assembler.level >= 25) localBoost *= 1.08;
+      if (line.id === "pack" && state.lines.qc.level >= 10) localBoost *= 1.05;
       const milestoneMul = getLineMilestoneMultiplier(lv);
       wps += safeNumber(line.baseRate * lv * localBoost * milestoneMul, `calcWindowsPerSec:${line.id}`);
     }
@@ -958,7 +967,8 @@ function getNextChainStepOffer() {
 }
 
 function generateContractOffer() {
-  const chained = getNextChainStepOffer();
+  const alreadyOfferedChain = state.contractBoard?.some((c) => c.chainMeta && state.activeChain && c.chainMeta.id === state.activeChain.id && c.chainMeta.step === state.activeChain.step);
+  const chained = alreadyOfferedChain ? null : getNextChainStepOffer();
   if (chained) return chained;
   const template = contractTemplates[Math.floor(Math.random() * contractTemplates.length)];
   const typeNames = Object.keys(contractTypes);
@@ -989,6 +999,23 @@ function generateContractOffer() {
     research: Math.ceil((template.rewards.research || 0) * modPack.rewardMul * (specialCfg?.rewardMul || 1)),
     parts: Math.ceil((template.rewards.parts || 0) * modPack.rewardMul * (specialCfg?.rewardMul || 1))
   };
+  const rewardFocusRoll = Math.random();
+  let rewardFocus = "Cash";
+  if (rewardFocusRoll < 0.2) {
+    rewardFocus = "Fragments";
+  } else if (rewardFocusRoll < 0.38) {
+    rewardFocus = "Research";
+  } else if (rewardFocusRoll < 0.52) {
+    rewardFocus = "Reputation";
+  }
+  if (rewardFocus === "Fragments") {
+    rewards.cash = Math.ceil(rewards.cash * 0.9);
+  } else if (rewardFocus === "Research") {
+    rewards.research = Math.max(1, Math.ceil((rewards.research || 0) * 1.35 + 1));
+  } else if (rewardFocus === "Reputation") {
+    rewards.rep = Math.max(1, Math.ceil((rewards.rep || 0) * 1.45));
+    rewards.cash = Math.ceil(rewards.cash * 0.92);
+  }
   const fragments = Math.max(0, Math.round((template.fragments || 0) * modPack.fragmentMul) + modPack.flatFragments + (specialCfg?.fragmentBonus || 0));
   const tierRequired = specialType === "Boss" ? Math.max(2, state.contractTier) : Math.max(1, state.contractTier - 1);
   const limited = Math.random() < 0.16 + Math.min(0.12, state.contractTier * 0.015);
@@ -1012,11 +1039,15 @@ function generateContractOffer() {
     expiresAt,
     rarityTier,
     special: template.special || null,
-    modifiers: mods.map((m) => m.text),
+    modifiers: [`Focus: ${rewardFocus}`, ...mods.map((m) => m.text)],
     requiredLine: modPack.requiredLine,
     riskPenaltyChance: typeCfg.riskPenaltyChance + (specialType === "Boss" ? 0.04 : 0),
     chainMeta: null
   };
+}
+
+function getContractStreakBonus() {
+  return Math.min(0.12, state.contractStreak * 0.02);
 }
 
 function rollSpecialContractType() {
@@ -1109,6 +1140,7 @@ function failContract() {
   toast("Contract failed. Client unhappy.");
   const failLoss = (state.contract.failRep || 2.5) * Math.max(0.2, state.modifiers.contractFailurePenaltyMul);
   state.resources.reputation = Math.max(0, state.resources.reputation - failLoss);
+  state.contractStreak = 0;
   state.contract = null;
   state.contractContext.rushUsed = false;
   renderAll();
@@ -1124,6 +1156,7 @@ function claimContractReward() {
   if (c.specialType === "VIP") mult += state.modifiers.vipContractReward;
   if (c.specialType === "Boss" && state.flags.bossBreaker) mult += 0.15;
   if (c.specialType === "Chain" && state.flags.chainMastery) mult += Math.min(0.22, state.contractChainDepth * 0.04);
+  mult *= 1 + getContractStreakBonus();
   if (state.activeRunEvent?.contractRewardMul) mult *= state.activeRunEvent.contractRewardMul;
   if (c.type === "Risky" && Math.random() < (c.riskPenaltyChance || 0)) {
     mult *= 0.72;
@@ -1161,6 +1194,8 @@ function claimContractReward() {
   grantSkillXp(1 + (c.type === "Premium" ? 1 : 0), "contract completion");
 
   state.completedContracts += 1;
+  state.contractStreak += 1;
+  state.bestContractStreak = Math.max(state.bestContractStreak, state.contractStreak);
   if (c.specialType === "Chain") {
     const seq = c.chainMeta?.id || state.activeChain?.id || chainSequences[Math.floor(Math.random() * chainSequences.length)].id;
     const nextStep = (c.chainMeta?.step ?? state.activeChain?.step ?? 0) + 1;
@@ -1173,7 +1208,8 @@ function claimContractReward() {
   gainContractXp(c);
   maybeAwardChest(c);
   showRewardPopup(`Claimed +$${fmt((c.rewardPack.cash || 0) * mult)} • +${fragGain} fragments`);
-  toast(`Reward claimed: ${c.name}${fragGain ? ` (+${fragGain} fragments)` : ""}`);
+  const streakTxt = state.contractStreak > 1 ? ` • streak ${state.contractStreak}` : "";
+  toast(`Reward claimed: ${c.name}${fragGain ? ` (+${fragGain} fragments)` : ""}${streakTxt}`);
   state.contract = null;
   state.contractContext.rushUsed = false;
   validateGameState("claimContractReward");
@@ -1337,6 +1373,28 @@ function applyLineMilestoneBonuses() {
   if (state.runFocus === "contract") state.modifiers.contractReward += 0.1;
   if (state.runFocus === "blueprint") state.modifiers.rareFragmentChance += 0.1;
   if (state.runFocus === "offline") state.modifiers.offlineEfficiency += 0.15;
+  const spend = {};
+  state.skills.forEach((id) => {
+    const node = skillDefs.find((s) => s.id === id);
+    if (!node) return;
+    spend[node.branch] = (spend[node.branch] || 0) + (node.cost || 0);
+  });
+  const ranking = Object.entries(spend).sort((a, b) => b[1] - a[1]);
+  if (ranking.length) {
+    const [branch, topPoints] = ranking[0];
+    const secondPoints = ranking[1]?.[1] || 0;
+    if (topPoints >= 8 && topPoints >= secondPoints * 1.4) {
+      if (branch === "Production") state.modifiers.prod += 0.06;
+      if (branch === "Contracts") state.modifiers.contractReward += 0.06;
+      if (branch === "Automation") state.modifiers.offlineEfficiency += 0.08;
+      if (branch === "Economy") state.modifiers.cashBonus += 0.06;
+      if (branch === "Quality") {
+        state.modifiers.reputationGain += 0.06;
+        state.modifiers.contractFailurePenaltyMul -= 0.06;
+      }
+      if (branch === "Workforce") state.modifiers.rushPower += 0.08;
+    }
+  }
   if (lineDefs.every((l) => state.lines[l.id].level >= 50)) {
     state.modifiers.prod += 0.15;
     state.modifiers.contractReward += 0.08;
@@ -1424,14 +1482,14 @@ function calcRunEfficiency(stats = state) {
 }
 
 function calcModernizationReward(stats = state) {
-  const revenueFactor = Math.pow(Math.max(0, stats.totalEarned) / 180000, 0.72) * 4.4;
-  const contractFactor = Math.pow(Math.max(0, stats.completedContracts), 0.84) * 0.95;
-  const blueprintFactor = Math.pow(Math.max(0, stats.blueprints.length), 1.18) * 2.15;
+  const revenueFactor = Math.pow(Math.max(0, stats.totalEarned) / 240000, 0.7) * 4.1;
+  const contractFactor = Math.pow(Math.max(0, stats.completedContracts), 0.82) * 0.9;
+  const blueprintFactor = Math.pow(Math.max(0, stats.blueprints.length), 1.22) * 2.35;
   const efficiencyFactor = Math.max(0, (calcRunEfficiency(stats) - 0.85) * 3.8);
   const rawScore = revenueFactor + contractFactor + blueprintFactor + efficiencyFactor;
   const playMin = Math.max(0, stats.playtime / 60);
   const shortRunPenalty = playMin < 8 ? 0.28 + (playMin / 8) * 0.72 : 1;
-  const longevityBonus = 1 + Math.min(0.38, Math.log1p(playMin) / 11);
+  const longevityBonus = 1 + Math.min(0.34, Math.log1p(playMin) / 12);
   const resetDiminish = 1 / (1 + state.modernizationCount * 0.06);
   const tokenFloat = rawScore * shortRunPenalty * longevityBonus * resetDiminish;
   return Math.max(0, Math.floor(tokenFloat));
@@ -2103,9 +2161,10 @@ function renderContracts() {
   if (el.contractRefreshStatus) {
     const sec = Math.max(0, Math.ceil((state.contractRefreshAt - Date.now()) / 1000));
     const needed = 5 + state.contractTier * 3;
+    const streakBonusPct = Math.round(getContractStreakBonus() * 100);
     el.contractRefreshStatus.textContent = refreshReady
-      ? `Tier ${state.contractTier} ready • XP ${state.contractXp}/${needed}.`
-      : `Tier ${state.contractTier} • new offers in ${sec}s • XP ${state.contractXp}/${needed}`;
+      ? `Tier ${state.contractTier} ready • XP ${state.contractXp}/${needed} • Streak ${state.contractStreak} (+${streakBonusPct}%).`
+      : `Tier ${state.contractTier} • new offers in ${sec}s • XP ${state.contractXp}/${needed} • Streak ${state.contractStreak} (+${streakBonusPct}%)`;
   }
 
   el.contractList.querySelectorAll("button[data-contract]").forEach((btn) => btn.addEventListener("click", () => startContract(btn.dataset.contract)));
@@ -2686,8 +2745,11 @@ function normalizeState(incoming) {
   if (typeof next.contractXp !== "number") next.contractXp = 0;
   if (typeof next.contractChainDepth !== "number") next.contractChainDepth = 0;
   if (typeof next.contractBossWins !== "number") next.contractBossWins = 0;
+  if (typeof next.contractStreak !== "number") next.contractStreak = 0;
+  if (typeof next.bestContractStreak !== "number") next.bestContractStreak = 0;
   if (!next.activeChain || typeof next.activeChain !== "object") next.activeChain = null;
   if (!next.activeRunEvent || typeof next.activeRunEvent !== "object") next.activeRunEvent = null;
+  if (next.activeRunEvent && !Number.isFinite(Number(next.activeRunEvent.until))) next.activeRunEvent = null;
   if (typeof next.runEventNextAt !== "number") next.runEventNextAt = 0;
   if (!runFocusOptions.some((f) => f.id === next.runFocus)) next.runFocus = null;
   next.skills = (next.skills || []).filter((id) => skillDefs.some((s) => s.id === id));
