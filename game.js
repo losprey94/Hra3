@@ -16,7 +16,10 @@ const lineMilestones = [5, 10, 25, 50];
 const chainSequences = [
   { id: "school", steps: ["School Renovation I", "School Renovation II", "School Final Delivery"] },
   { id: "villa", steps: ["Luxury Villa Order I", "Luxury Villa Order II", "Luxury Premium Finish"] },
-  { id: "export", steps: ["Export Batch I", "Customs Rush", "Regional Deal"] }
+  { id: "export", steps: ["Export Batch I", "Customs Rush", "Regional Deal"] },
+  { id: "hospital", steps: ["Hospital Wing Glazing", "Sterile Seal Refit", "Emergency Block Handover"] },
+  { id: "metro", steps: ["Metro Station Retrofit", "Platform Safety Glass", "Interchange Grand Opening"] },
+  { id: "resort", steps: ["Coastal Resort Atrium", "Saltproof Seal Pass", "Panorama Suite Completion"] }
 ];
 
 const runFocusOptions = [
@@ -26,11 +29,24 @@ const runFocusOptions = [
   { id: "offline", label: "Offline Focus", desc: "+15% offline earnings this run" }
 ];
 
+const runGoalOptions = [
+  { id: "contract", label: "Contract Run", desc: "Complete 6 contracts", target: 6 },
+  { id: "production", label: "Production Run", desc: "Reach 40 w/s", target: 40 },
+  { id: "blueprint", label: "Blueprint Run", desc: "Earn 18 fragments", target: 18 },
+  { id: "speed", label: "Speed Run", desc: "Reach modernization reward 4", target: 4 },
+  { id: "chain", label: "Chain Run", desc: "Finish 3 chain contracts", target: 3 },
+  { id: "quality", label: "Quality Run", desc: "Reach 55 reputation", target: 55 },
+  { id: "parts", label: "Logistics Run", desc: "Collect 120 parts", target: 120 }
+];
+
 const softEventPool = [
   { id: "glass_surge", text: "Glass Demand Surge", duration: 600, contractRewardMul: 1.2 },
   { id: "supplier_discount", text: "Supplier Discount", duration: 300, costMul: 0.9 },
   { id: "power_surge", text: "Power Surge", duration: 120, prodMul: 1.15 },
-  { id: "export_rush", text: "Export Rush", duration: 300, contractSpeedMul: 1.1 }
+  { id: "export_rush", text: "Export Rush", duration: 300, contractSpeedMul: 1.1 },
+  { id: "qc_award", text: "Quality Certification Week", duration: 360, contractRewardMul: 1.1 },
+  { id: "dock_priority", text: "Dock Priority Window", duration: 240, contractSpeedMul: 1.08 },
+  { id: "recycle_credit", text: "Recycling Credit Program", duration: 300, costMul: 0.93 }
 ];
 
 const machineSpecDefs = {
@@ -68,7 +84,12 @@ const contractTemplates = [
   { id: "green", name: "Eco Tower Fitout", baseDuration: 320, baseWindows: 270, minRep: 8, failRep: 3, rewards: { cash: 500, rep: 4, research: 5 }, fragments: 2, special: "research_bonus" },
   { id: "airport", name: "Airport Terminal Rush", baseDuration: 560, baseWindows: 680, minRep: 24, failRep: 4, rewards: { cash: 1250, rep: 7, parts: 9 }, fragments: 3, special: "rush_bonus" },
   { id: "fragile", name: "Fragile Glass Emergency", baseDuration: 430, baseWindows: 540, minRep: 28, failRep: 8, rewards: { cash: 1850, rep: 5, parts: 6 }, fragments: 4, special: "risky_parts" },
-  { id: "lux", name: "Luxury Skyline Contract", baseDuration: 980, baseWindows: 1680, minRep: 42, failRep: 6, rewards: { cash: 3850, rep: 11, research: 15, parts: 16 }, fragments: 7, special: "blueprint_fragments_bonus" }
+  { id: "lux", name: "Luxury Skyline Contract", baseDuration: 980, baseWindows: 1680, minRep: 42, failRep: 6, rewards: { cash: 3850, rep: 11, research: 15, parts: 16 }, fragments: 7, special: "blueprint_fragments_bonus" },
+  { id: "rail_hub", name: "Rail Hub Platform Shielding", baseDuration: 520, baseWindows: 620, minRep: 20, failRep: 4, rewards: { cash: 1180, rep: 6, parts: 8 }, fragments: 3 },
+  { id: "clinic", name: "Clinic Sterile Window Upgrade", baseDuration: 390, baseWindows: 440, minRep: 16, failRep: 3, rewards: { cash: 820, rep: 5, research: 6 }, fragments: 3, special: "research_bonus" },
+  { id: "storm", name: "Stormproof District Rebuild", baseDuration: 740, baseWindows: 980, minRep: 34, failRep: 7, rewards: { cash: 2240, rep: 8, parts: 12 }, fragments: 5, special: "risky_parts" },
+  { id: "datacenter", name: "Data Center Thermal Refit", baseDuration: 860, baseWindows: 1280, minRep: 38, failRep: 5, rewards: { cash: 3020, rep: 9, research: 11, parts: 10 }, fragments: 6, special: "rush_bonus" },
+  { id: "atrium", name: "Grand Atrium Panorama Install", baseDuration: 1040, baseWindows: 1760, minRep: 46, failRep: 6, rewards: { cash: 4100, rep: 12, research: 14, parts: 18 }, fragments: 8, special: "blueprint_fragments_bonus" }
 ];
 
 const contractTypes = {
@@ -99,9 +120,13 @@ const chestRarities = ["common", "rare", "epic", "legendary"];
 const milestoneDefs = [
   { id: "m_short_1", tier: "Short", label: "Produce 2,500 windows", progress: () => state.windowsMade / 2500, reward: { cash: 320, fragments: 2 } },
   { id: "m_short_2", tier: "Short", label: "Complete 5 contracts", progress: () => state.completedContracts / 5, reward: { research: 8, chest: "common" } },
+  { id: "m_short_3", tier: "Short", label: "Reach 12 w/s production", progress: () => calcWindowsPerSec() / 12, reward: { cash: 500, parts: 6 } },
   { id: "m_mid_1", tier: "Mid", label: "Unlock 2 blueprints", progress: () => state.blueprints.length / 2, reward: { chest: "rare", fragments: 4 } },
   { id: "m_mid_2", tier: "Mid", label: "Earn $50K total", progress: () => state.totalEarned / 50000, reward: { tokens: 1, chest: "epic" } },
-  { id: "m_long_1", tier: "Long", label: "Complete 20 contracts", progress: () => state.completedContracts / 20, reward: { tokens: 2, chest: "legendary" } }
+  { id: "m_mid_3", tier: "Mid", label: "Finish 4 chain contracts", progress: () => state.contractChainDepth / 4, reward: { fragments: 6, research: 12 } },
+  { id: "m_long_1", tier: "Long", label: "Complete 20 contracts", progress: () => state.completedContracts / 20, reward: { tokens: 2, chest: "legendary" } },
+  { id: "m_long_2", tier: "Long", label: "Reach contract tier 8", progress: () => state.contractTier / 8, reward: { tokens: 2, chest: "epic", fragments: 8 } },
+  { id: "m_long_3", tier: "Long", label: "Produce 35,000 windows", progress: () => state.windowsMade / 35000, reward: { tokens: 1, chest: "legendary", parts: 30 } }
 ];
 
 const skillDefs = [
@@ -109,37 +134,37 @@ const skillDefs = [
   { id: "prod_2", name: "Cut Precision", branch: "Production", tier: 2, cost: 2, type: "small", prereq: "prod_1", desc: "+4% production speed", effect: () => state.modifiers.prod += 0.04 },
   { id: "prod_3", name: "Furnace Pressure", branch: "Production", tier: 3, cost: 3, type: "medium", prereq: "prod_2", desc: "+10% production speed", effect: () => state.modifiers.prod += 0.1 },
   { id: "prod_4", name: "Output Mix", branch: "Production", tier: 4, cost: 4, type: "notable", prereq: "prod_2", desc: "+10% cash/window", effect: () => state.modifiers.cashBonus += 0.1 },
-  { id: "prod_5", name: "Keystone: Overdrive Protocol", branch: "Production", tier: 5, cost: 6, type: "keystone", prereq: "prod_3", desc: "▲ +42% production and stronger line cadence ▼ -22% contract rewards", effect: () => { state.modifiers.prod += 0.42; state.modifiers.lineMilestonePower += 0.16; state.modifiers.contractReward -= 0.22; } },
+  { id: "prod_5", name: "Keystone: Furnace Symphony Protocol", branch: "Production", tier: 5, cost: 6, type: "keystone", prereq: "prod_3", desc: "▲ +42% production and stronger line cadence ▼ -22% contract rewards", effect: () => { state.modifiers.prod += 0.42; state.modifiers.lineMilestonePower += 0.16; state.modifiers.contractReward -= 0.22; } },
 
   { id: "auto_1", name: "Autoload Arms", branch: "Automation", tier: 1, cost: 1, type: "small", desc: "+5% offline efficiency", effect: () => state.modifiers.offlineEfficiency += 0.05 },
   { id: "auto_2", name: "Sensor Mesh", branch: "Automation", tier: 2, cost: 2, type: "small", prereq: "auto_1", desc: "+4% part recovery chance", effect: () => state.modifiers.partsChance += 0.04 },
   { id: "auto_3", name: "Queued Dispatch", branch: "Automation", tier: 3, cost: 3, type: "medium", prereq: "auto_2", desc: "+12% offline efficiency", effect: () => state.modifiers.offlineEfficiency += 0.12 },
   { id: "auto_4", name: "Maintenance AI", branch: "Automation", tier: 4, cost: 4, type: "notable", prereq: "auto_2", desc: "-10% line costs", effect: () => state.modifiers.costDiscount += 0.1 },
-  { id: "auto_5", name: "Keystone: Night Shift Grid", branch: "Automation", tier: 5, cost: 6, type: "keystone", prereq: "auto_3", desc: "▲ +70% offline earnings ▼ -15% boost power", effect: () => { state.modifiers.offlineEfficiency += 0.7; state.modifiers.activeProductionPenalty += 0.05; state.modifiers.rushPower -= 0.15; } },
+  { id: "auto_5", name: "Keystone: Night Shift Conveyor Grid", branch: "Automation", tier: 5, cost: 6, type: "keystone", prereq: "auto_3", desc: "▲ +70% offline earnings ▼ -15% boost power", effect: () => { state.modifiers.offlineEfficiency += 0.7; state.modifiers.activeProductionPenalty += 0.05; state.modifiers.rushPower -= 0.15; } },
 
   { id: "con_1", name: "Client Briefing", branch: "Contracts", tier: 1, cost: 1, type: "small", desc: "+5% contract rewards", effect: () => state.modifiers.contractReward += 0.05 },
   { id: "con_2", name: "Sales Cadence", branch: "Contracts", tier: 2, cost: 2, type: "small", prereq: "con_1", desc: "+5% contract rewards", effect: () => state.modifiers.contractReward += 0.05 },
   { id: "con_3", name: "Premium Clauses", branch: "Contracts", tier: 3, cost: 3, type: "medium", prereq: "con_2", desc: "+12% premium and +8% VIP contract rewards", effect: () => { state.modifiers.premiumContractReward += 0.12; state.modifiers.vipContractReward += 0.08; } },
   { id: "con_4", name: "Rapid Negotiation", branch: "Contracts", tier: 4, cost: 4, type: "notable", prereq: "con_2", desc: "-10% contract duration", effect: () => state.modifiers.contractDurationMul -= 0.1 },
-  { id: "con_5", name: "Keystone: All-In Brokerage", branch: "Contracts", tier: 5, cost: 6, type: "keystone", prereq: "con_3", desc: "▲ +45% contract rewards and chain mastery ▼ +20% contract duration", effect: () => { state.modifiers.contractReward += 0.45; state.modifiers.contractDurationMul += 0.2; state.flags.chainMastery = true; } },
+  { id: "con_5", name: "Keystone: All-In Brokerage Charter", branch: "Contracts", tier: 5, cost: 6, type: "keystone", prereq: "con_3", desc: "▲ +45% contract rewards and chain mastery ▼ +20% contract duration", effect: () => { state.modifiers.contractReward += 0.45; state.modifiers.contractDurationMul += 0.2; state.flags.chainMastery = true; } },
 
   { id: "eco_1", name: "Tax Timing", branch: "Economy", tier: 1, cost: 1, type: "small", desc: "+4% cash/window", effect: () => state.modifiers.cashBonus += 0.04 },
   { id: "eco_2", name: "Bulk Negotiation", branch: "Economy", tier: 2, cost: 2, type: "small", prereq: "eco_1", desc: "-4% line costs", effect: () => state.modifiers.costDiscount += 0.04 },
   { id: "eco_3", name: "Capital Rotation", branch: "Economy", tier: 3, cost: 3, type: "medium", prereq: "eco_2", desc: "+10% cash/window", effect: () => state.modifiers.cashBonus += 0.1 },
   { id: "eco_4", name: "Margin Controls", branch: "Economy", tier: 4, cost: 4, type: "notable", prereq: "eco_2", desc: "-10% line costs", effect: () => state.modifiers.costDiscount += 0.1 },
-  { id: "eco_5", name: "Keystone: Profit Doctrine", branch: "Economy", tier: 5, cost: 6, type: "keystone", prereq: "eco_3", desc: "▲ -15% costs and +18% cash ▼ -18% fragment gains", effect: () => { state.modifiers.cashBonus += 0.18; state.modifiers.costDiscount += 0.15; state.modifiers.economicPressureResist += 0.12; state.modifiers.fragmentGain -= 0.18; } },
+  { id: "eco_5", name: "Keystone: Margin-First Profit Doctrine", branch: "Economy", tier: 5, cost: 6, type: "keystone", prereq: "eco_3", desc: "▲ -15% costs and +18% cash ▼ -18% fragment gains", effect: () => { state.modifiers.cashBonus += 0.18; state.modifiers.costDiscount += 0.15; state.modifiers.economicPressureResist += 0.12; state.modifiers.fragmentGain -= 0.18; } },
 
   { id: "qual_1", name: "Optic Calibration", branch: "Quality", tier: 1, cost: 1, type: "small", desc: "+5% reputation gain", effect: () => state.modifiers.reputationGain += 0.05 },
   { id: "qual_2", name: "Defect Catchers", branch: "Quality", tier: 2, cost: 2, type: "small", prereq: "qual_1", desc: "+4% part recovery chance", effect: () => state.modifiers.partsChance += 0.04 },
   { id: "qual_3", name: "Seal Inspection", branch: "Quality", tier: 3, cost: 3, type: "medium", prereq: "qual_2", desc: "-12% contract fail reputation loss", effect: () => state.modifiers.contractFailurePenaltyMul -= 0.12 },
   { id: "qual_4", name: "Premium Standard", branch: "Quality", tier: 4, cost: 4, type: "notable", prereq: "qual_2", desc: "+10% contract rewards", effect: () => state.modifiers.contractReward += 0.1 },
-  { id: "qual_5", name: "Keystone: Zero Defect Pledge", branch: "Quality", tier: 5, cost: 6, type: "keystone", prereq: "qual_3", desc: "▲ +40% premium rewards and +14% reputation ▼ -12% bulk output", effect: () => { state.modifiers.premiumContractReward += 0.4; state.modifiers.reputationGain += 0.14; state.modifiers.prod -= 0.06; state.flags.bossBreaker = true; } },
+  { id: "qual_5", name: "Keystone: Zero Defect Certification", branch: "Quality", tier: 5, cost: 6, type: "keystone", prereq: "qual_3", desc: "▲ +40% premium rewards and +14% reputation ▼ -12% bulk output", effect: () => { state.modifiers.premiumContractReward += 0.4; state.modifiers.reputationGain += 0.14; state.modifiers.prod -= 0.06; state.flags.bossBreaker = true; } },
 
   { id: "work_1", name: "Shift Meals", branch: "Workforce", tier: 1, cost: 1, type: "small", desc: "+4% rush power", effect: () => state.modifiers.rushPower += 0.04 },
   { id: "work_2", name: "Safety Program", branch: "Workforce", tier: 2, cost: 2, type: "small", prereq: "work_1", desc: "-5% fail reputation loss", effect: () => state.modifiers.contractFailurePenaltyMul -= 0.05 },
   { id: "work_3", name: "Crew Rhythm", branch: "Workforce", tier: 3, cost: 3, type: "medium", prereq: "work_2", desc: "+10% production speed", effect: () => state.modifiers.prod += 0.1 },
   { id: "work_4", name: "Union Coordination", branch: "Workforce", tier: 4, cost: 4, type: "notable", prereq: "work_2", desc: "+12% rush duration", effect: () => state.modifiers.rushDuration += 1.2 },
-  { id: "work_5", name: "Keystone: Human Priority", branch: "Workforce", tier: 5, cost: 6, type: "keystone", prereq: "work_3", desc: "▲ -38% fail loss, +16% rush power, adaptive blueprints ▼ -14% offline gains", effect: () => { state.modifiers.contractFailurePenaltyMul -= 0.38; state.modifiers.rushPower += 0.16; state.modifiers.offlineEfficiency -= 0.14; state.flags.adaptiveBlueprints = true; } }
+  { id: "work_5", name: "Keystone: Human Priority Labor Accord", branch: "Workforce", tier: 5, cost: 6, type: "keystone", prereq: "work_3", desc: "▲ -38% fail loss, +16% rush power, adaptive blueprints ▼ -14% offline gains", effect: () => { state.modifiers.contractFailurePenaltyMul -= 0.38; state.modifiers.rushPower += 0.16; state.modifiers.offlineEfficiency -= 0.14; state.flags.adaptiveBlueprints = true; } }
 ];
 
 const blueprintDefs = [
@@ -147,13 +172,19 @@ const blueprintDefs = [
   { id: "bp_glass", name: "Precision Glass Cut Blueprint", desc: "Rare: +4% contract payouts, +8% VIP payouts, small double-reward chance", rarity: "Rare", fragmentCost: 45, effect: () => { state.modifiers.contractReward += 0.04; state.modifiers.vipContractReward += 0.08; state.flags.bpDoubleContractRewardChance = true; } },
   { id: "bp_thermal", name: "Thermal Seal Blueprint", desc: "Rare: +5% offline efficiency, reduced economic pressure, first contract bonus fragments", rarity: "Rare", fragmentCost: 80, effect: () => { state.modifiers.offlineEfficiency += 0.05; state.modifiers.economicPressureResist += 0.06; state.flags.bpFirstContractFragBonus = true; } },
   { id: "bp_assembly", name: "Smart Assembly Blueprint", desc: "Epic: +2% parts/+2% rep and boosts milestone power after tier 3 contracts", rarity: "Epic", fragmentCost: 130, effect: () => { state.modifiers.partsChance += 0.02; state.modifiers.reputationGain += 0.02; if (state.contractTier >= 3) state.modifiers.lineMilestonePower += 0.16; } },
-  { id: "bp_finish", name: "Premium Finish Blueprint", desc: "Legendary: adaptive economy boost, first upgrade discount, rush cycle bonus", rarity: "Legendary", fragmentCost: 190, effect: () => { const dynamicCash = Math.min(0.12, state.completedContracts * 0.003); state.modifiers.cashBonus += 0.03 + dynamicCash; state.modifiers.premiumContractReward += 0.03; state.flags.bpFirstUpgradeDiscount = true; state.flags.bpRushPartsBonus = true; } }
+  { id: "bp_finish", name: "Premium Finish Blueprint", desc: "Legendary: adaptive economy boost, first upgrade discount, rush cycle bonus", rarity: "Legendary", fragmentCost: 190, effect: () => { const dynamicCash = Math.min(0.12, state.completedContracts * 0.003); state.modifiers.cashBonus += 0.03 + dynamicCash; state.modifiers.premiumContractReward += 0.03; state.flags.bpFirstUpgradeDiscount = true; state.flags.bpRushPartsBonus = true; } },
+  { id: "bp_tempered", name: "Tempered Lattice Blueprint", desc: "Rare: +3% production, +4% reputation gains for safety-focused lines", rarity: "Rare", fragmentCost: 105, effect: () => { state.modifiers.prod += 0.03; state.modifiers.reputationGain += 0.04; } },
+  { id: "bp_logistics", name: "Dockflow Logistics Blueprint", desc: "Epic: -4% contract duration, +4% parts recovery, smoother rush windows", rarity: "Epic", fragmentCost: 150, effect: () => { state.modifiers.contractDurationMul -= 0.04; state.modifiers.partsChance += 0.04; state.modifiers.rushDuration += 0.45; } },
+  { id: "bp_pvc", name: "PVC Fusion Extrusion Blueprint", desc: "Legendary: +6% cash, +5% fragment gains, small line synergy increase", rarity: "Legendary", fragmentCost: 230, effect: () => { state.modifiers.cashBonus += 0.06; state.modifiers.fragmentGain += 0.05; state.modifiers.lineSynergy += 0.03; } }
 ];
 
 const modifierPool = [
   { id: "shortage", text: "Glass Shortage: -18% production for 3 minutes", duration: 180, prodMul: 0.82 },
   { id: "energy", text: "Energy Crisis: Rush cooldown +10s for 3 minutes", duration: 180, rushCdAdd: 10 },
-  { id: "boom", text: "Construction Boom: +12% cash for 3 minutes", duration: 180, cashMul: 1.12 }
+  { id: "boom", text: "Construction Boom: +12% cash for 3 minutes", duration: 180, cashMul: 1.12 },
+  { id: "inspection", text: "Audit Week: +10% contract rewards for 3 minutes", duration: 180, contractRewardMul: 1.1 },
+  { id: "belt_jam", text: "Conveyor Jam: -10% production for 2 minutes", duration: 120, prodMul: 0.9 },
+  { id: "dock_window", text: "Freight Slot Opened: +8% contract speed for 3 minutes", duration: 180, contractSpeedMul: 1.08 }
 ];
 
 const defaultState = () => ({
@@ -1918,12 +1949,7 @@ function openRunFocusPicker() {
 }
 
 function openRunGoalPicker() {
-  const goals = [
-    { id: "contract", label: "Contract Run", desc: "Complete 6 contracts", target: 6 },
-    { id: "production", label: "Production Run", desc: "Reach 40 w/s", target: 40 },
-    { id: "blueprint", label: "Blueprint Run", desc: "Earn 18 fragments", target: 18 },
-    { id: "speed", label: "Speed Run", desc: "Reach modernization reward 4", target: 4 }
-  ];
+  const goals = [...runGoalOptions].sort(() => Math.random() - 0.5).slice(0, 5);
   openModal(`
     <h3>Run Goal</h3>
     <p>Pick one optional run goal for a bonus chest + tokens.</p>
@@ -1935,6 +1961,7 @@ function openRunGoalPicker() {
       id,
       target: Number(targetStr),
       startContracts: state.completedContracts,
+      startChainDepth: state.contractChainDepth,
       startFragments: state.blueprintFragments,
       completed: false
     };
@@ -2124,14 +2151,22 @@ function tickRiskEvent(now) {
   document.getElementById("declineRiskEvent")?.addEventListener("click", closeModal);
 }
 
+function runGoalProgress(goal) {
+  if (!goal || typeof goal !== "object") return 0;
+  if (goal.id === "contract") return state.completedContracts - (goal.startContracts || 0);
+  if (goal.id === "production") return calcWindowsPerSec();
+  if (goal.id === "blueprint") return state.blueprintFragments - (goal.startFragments || 0);
+  if (goal.id === "speed") return calcModernizationReward();
+  if (goal.id === "chain") return state.contractChainDepth - (goal.startChainDepth || 0);
+  if (goal.id === "quality") return state.resources.reputation;
+  if (goal.id === "parts") return state.resources.parts;
+  return 0;
+}
+
 function tickRunGoal() {
   const g = state.runGoal;
   if (!g || g.completed) return;
-  let progress = 0;
-  if (g.id === "contract") progress = state.completedContracts - (g.startContracts || 0);
-  if (g.id === "production") progress = calcWindowsPerSec();
-  if (g.id === "blueprint") progress = state.blueprintFragments - (g.startFragments || 0);
-  if (g.id === "speed") progress = calcModernizationReward();
+  const progress = runGoalProgress(g);
   if (progress >= g.target) {
     g.completed = true;
     state.resources.tokens += 1;
@@ -2361,13 +2396,7 @@ function renderHUD() {
     let hint = goalReady ? "Goal ready" : (eta < 90 ? "Close to next upgrade" : "Build income");
     if (state.runGoal && !state.runGoal.completed) {
       const g = state.runGoal;
-      const progress = g.id === "contract"
-        ? state.completedContracts - (g.startContracts || 0)
-        : g.id === "production"
-          ? calcWindowsPerSec()
-          : g.id === "blueprint"
-            ? state.blueprintFragments - (g.startFragments || 0)
-            : calcModernizationReward();
+      const progress = runGoalProgress(g);
       hint = `Run goal: ${fmt(Math.max(0, progress))}/${fmt(g.target)}`;
     }
     el.missionHint.textContent = hint;
