@@ -293,6 +293,7 @@ let drawerOpen = false;
 let uiRefreshTimer = 0;
 let lastGameLoopErrorAt = 0;
 let lastStateValidationAt = 0;
+let overdriveReadyNotified = false;
 const repairWarningState = { lastAt: 0, count: 0 };
 
 const el = {
@@ -316,7 +317,6 @@ const el = {
   missionProgress: document.getElementById("missionProgress"),
   missionHint: document.getElementById("missionHint"),
   bottleneckChip: document.getElementById("bottleneckChip"),
-  challengeChip: document.getElementById("challengeChip"),
   rpsLabel: document.getElementById("rpsLabel"),
   wpsLabel: document.getElementById("wpsLabel"),
   cashFocus: document.getElementById("cashFocus"),
@@ -708,10 +708,14 @@ function gameTick() {
     tickModifier(now);
     tickRunEvent(now);
     tickRiskEvent(now);
-    tickChallenge(dt, made);
     tickRunGoal();
     const earlyChargeBoost = state.totalEarned < 5000 ? 1.45 : 1;
     state.overdrive.charge = Math.min(100, state.overdrive.charge + made * 0.012 * strategyMultipliers().overdriveCharge * earlyChargeBoost);
+    if (state.overdrive.charge >= 100 && !overdriveReadyNotified) {
+      toast("Overdrive ready.");
+      overdriveReadyNotified = true;
+    }
+    if (state.overdrive.charge < 100) overdriveReadyNotified = false;
 
     if (now > state.rush.activeUntil && now < state.rush.cooldownUntil) {
       const rem = Math.ceil((state.rush.cooldownUntil - now) / 1000);
@@ -1058,6 +1062,7 @@ function activateRush() {
   state.rush.cooldownUntil = now + 32000 + cdPenalty + darkShiftPenalty;
   state.runState.rushOrdersUsed += 1;
   state.overdrive.charge = 0;
+  overdriveReadyNotified = false;
   state.overdrive.streak = (state.overdrive.streak || 0) + 1;
   if (state.overdrive.streak % 4 === 0) {
     state.resources.parts += 1;
@@ -2025,64 +2030,6 @@ function tickRunEvent(now) {
   state.runEventNextAt = now + (150000 + Math.random() * 150000);
 }
 
-function getChallengePool() {
-  return [
-    { id: "prod_3m", label: "Produce 900 windows in 3m", duration: 180, target: 900, type: "windows", reward: { cash: 620, parts: 1, fragments: 1 } },
-    { id: "contracts_2", label: "Complete 2 contracts in 6m", duration: 360, target: 2, type: "contracts", reward: { cash: 760, reputation: 3, fragments: 1 } },
-    { id: "cash_noboost", label: "Earn $2.2K without boost in 3m", duration: 180, target: 2200, type: "cashNoBoost", reward: { cash: 980, research: 2 } }
-  ];
-}
-
-function spawnChallenge() {
-  if (state.activeChallenge) return;
-  const def = getChallengePool()[Math.floor(Math.random() * getChallengePool().length)];
-  state.activeChallenge = {
-    ...def,
-    startedAt: Date.now(),
-    until: Date.now() + def.duration * 1000,
-    progress: 0,
-    startContracts: state.completedContracts,
-    startCash: state.totalEarned,
-    startRushUsed: state.runState.rushOrdersUsed
-  };
-}
-
-function tickChallenge(dt, made) {
-  if (!state.activeChallenge) {
-    if (Math.random() < dt * 0.004) spawnChallenge();
-    return;
-  }
-  const c = state.activeChallenge;
-  if (c.type === "windows") c.progress += made;
-  if (c.type === "contracts") c.progress = Math.max(0, state.completedContracts - c.startContracts);
-  if (c.type === "cashNoBoost") {
-    if (state.runState.rushOrdersUsed > c.startRushUsed) {
-      toast("Challenge failed: boost used.");
-      state.activeChallenge = null;
-      return;
-    }
-    c.progress = Math.max(0, state.totalEarned - c.startCash);
-  }
-  if (c.progress >= c.target) {
-    applyRewardPayload({ cash: c.reward.cash || 0, research: c.reward.research || 0, fragments: c.reward.fragments || 0 });
-    if (c.reward.reputation) state.resources.reputation += c.reward.reputation;
-    state.challengeHistory.completed = (state.challengeHistory.completed || 0) + 1;
-    state.milestoneStreak = (state.milestoneStreak || 0) + 1;
-    if (state.milestoneStreak % 5 === 0) {
-      state.resources.parts += 2;
-      toast("Challenge streak: +2 parts");
-    }
-    showRewardPopup(`Challenge complete: ${c.label}`);
-    state.activeChallenge = null;
-    return;
-  }
-  if (Date.now() >= c.until) {
-    state.milestoneStreak = 0;
-    toast(`Challenge expired: ${c.label}`);
-    state.activeChallenge = null;
-  }
-}
-
 function tickRiskEvent(now) {
   if (!state.riskEventNextAt) state.riskEventNextAt = now + 480000;
   if (activeModal || state.contract || now < state.riskEventNextAt) return;
@@ -2366,14 +2313,6 @@ function renderHUD() {
   }
   const bottleneck = bottleneckAnalysis();
   if (el.bottleneckChip) el.bottleneckChip.textContent = bottleneck.text;
-  if (el.challengeChip) {
-    const c = state.activeChallenge;
-    if (!c) el.challengeChip.textContent = "Challenge: standby";
-    else {
-      const left = Math.max(0, Math.ceil((c.until - Date.now()) / 1000));
-      el.challengeChip.textContent = `Challenge: ${c.label} (${fmt(Math.min(c.target, c.progress))}/${fmt(c.target)} • ${left}s)`;
-    }
-  }
   if (goalReady && !goalReadyLastTick) {
     toast("Goal ready: next upgrade is affordable.");
   }
@@ -2500,6 +2439,12 @@ function renderContracts() {
     const strategyLock = c.requiredStrategy && c.requiredStrategy !== state.productionStrategy;
     const blueprintLock = c.requiredBlueprint && !state.blueprints.includes(c.requiredBlueprint);
     const bottleneckLock = c.requiredBottleneck && bottleneckAnalysis().severity > c.requiredBottleneck * strategyMultipliers().bottleneckTolerance;
+    const reqItems = [];
+    if (c.requiredLine) reqItems.push(`${lineDefs.find((l) => l.id === c.requiredLine.id)?.name || "Line"} Lv ${c.requiredLine.level}`);
+    if (c.requiredWps) reqItems.push(`${fmt(c.requiredWps)} w/s`);
+    if (c.requiredStrategy) reqItems.push(`${c.requiredStrategy === "quality" ? "Premium Quality" : "Mass Production"} mode`);
+    if (c.requiredBlueprint) reqItems.push(`${blueprintDefs.find((bp) => bp.id === c.requiredBlueprint)?.name || c.requiredBlueprint}`);
+    if (c.requiredBottleneck) reqItems.push(`Bottleneck < ${c.requiredBottleneck}%`);
     const statusText = tierLock ? `Tier ${c.tierRequired}` : (lock ? "Rep locked" : (lineLock || wpsLock || strategyLock || blueprintLock || bottleneckLock ? "Req locked" : "Ready"));
     const special = c.modifiers?.length ? c.modifiers[0] : "Standard terms";
     const typeClass = `type-${c.type.toLowerCase()}`;
@@ -2512,11 +2457,7 @@ function renderContracts() {
       <div class="row-meta"><span>${c.windows} windows • ${c.duration}s</span><span>Rep ${c.minRep.toFixed(0)}</span></div>
       <div class="row-meta"><span>$${fmt(c.rewards.cash)} • +${c.fragmentReward || 0} frags</span><span>${statusText}</span></div>
       <div class="row-meta"><span>${special}</span><span>Fail -${c.failRep} rep</span></div>
-      ${c.requiredLine ? `<div class="row-meta"><span>Requires ${lineDefs.find((l) => l.id === c.requiredLine.id)?.name || "Line"} Lv ${c.requiredLine.level}</span><span></span></div>` : ""}
-      ${c.requiredWps ? `<div class="row-meta"><span>Need ${fmt(c.requiredWps)} w/s</span><span>${wpsLock ? "Not reached" : "Reached"}</span></div>` : ""}
-      ${c.requiredStrategy ? `<div class="row-meta"><span>Need strategy: ${c.requiredStrategy === "quality" ? "Premium Quality" : "Mass Production"}</span><span>${strategyLock ? "Mismatch" : "Matched"}</span></div>` : ""}
-      ${c.requiredBlueprint ? `<div class="row-meta"><span>Need blueprint: ${blueprintDefs.find((bp) => bp.id === c.requiredBlueprint)?.name || c.requiredBlueprint}</span><span>${blueprintLock ? "Missing" : "Owned"}</span></div>` : ""}
-      ${c.requiredBottleneck ? `<div class="row-meta"><span>Need bottleneck under ${c.requiredBottleneck}%</span><span>${bottleneckLock ? "Too constrained" : "Within limit"}</span></div>` : ""}
+      ${reqItems.length ? `<div class="row-meta"><span>Needs: ${reqItems.join(" • ")}</span><span>${lineLock || wpsLock || strategyLock || blueprintLock || bottleneckLock ? "Missing reqs" : "All met"}</span></div>` : ""}
       <div class="row-meta"><span>Tier ${c.tierRequired || 1}</span><button class="action-btn slim" data-contract-detail="${c.id}">Details</button></div>
       ${(!lock && !tierLock && !lineLock && !wpsLock && !strategyLock && !blueprintLock && !bottleneckLock && !state.contract) ? `<button class="action-btn ${nearExpiry ? "ready-pulse" : ""}" data-contract="${c.id}">Start</button>` : ""}
     </div>`;
