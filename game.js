@@ -1,4 +1,5 @@
 const SAVE_KEY = "window_factory_tycoon_v1";
+const SAVE_VERSION = 2;
 
 const RESOURCES = ["cash", "research", "reputation", "parts", "tokens"];
 
@@ -156,6 +157,7 @@ const modifierPool = [
 ];
 
 const defaultState = () => ({
+  saveVersion: SAVE_VERSION,
   resources: { cash: 75, research: 0, reputation: 0, parts: 0, tokens: 0 },
   lines: Object.fromEntries(lineDefs.map((l) => [l.id, { level: l.id === "cutter" ? 1 : 0 }])),
   divisions: Object.fromEntries(divisionDefs.map((d) => [d.id, false])),
@@ -297,6 +299,8 @@ let overdriveReadyNotified = false;
 let lastMoneyPopAt = 0;
 let lastRewardPopupAt = 0;
 const repairWarningState = { lastAt: 0, count: 0 };
+let startupRepairNotice = "";
+let activeRepairCollector = null;
 
 const el = {
   resourceStrip: document.getElementById("resourceStrip"),
@@ -347,6 +351,7 @@ recalculateProgressionEffects();
 applyOfflineEarnings();
 applySettingsToUI();
 renderAll();
+if (startupRepairNotice) toast(startupRepairNotice);
 setInterval(gameTick, 250);
 setInterval(autoSave, 10000);
 
@@ -373,6 +378,10 @@ function warnRepair(issue, details = null) {
   if (now - repairWarningState.lastAt >= 2000) repairWarningState.count = 0;
   repairWarningState.lastAt = now;
   repairWarningState.count += 1;
+  if (activeRepairCollector) {
+    activeRepairCollector.count += 1;
+    if (activeRepairCollector.issues.length < 8) activeRepairCollector.issues.push(issue);
+  }
   console.warn(`[state-repair] ${issue}`, details || "");
 }
 
@@ -393,13 +402,18 @@ function clampNonNegative(value, fallback, label) {
 }
 
 function validateGameState(reason = "runtime") {
+  const report = { repaired: false, count: 0, issues: [] };
+  activeRepairCollector = report;
   const defaults = defaultState();
   if (!state || typeof state !== "object") {
     warnRepair(`State object missing (${reason}), restoring defaults.`);
     state = defaults;
-    return;
+    report.repaired = true;
+    activeRepairCollector = null;
+    return report;
   }
 
+  state.saveVersion = SAVE_VERSION;
   state.resources = { ...defaults.resources, ...(state.resources || {}) };
   Object.keys(defaults.resources).forEach((key) => {
     state.resources[key] = clampNonNegative(state.resources[key], defaults.resources[key], `resources.${key}`);
@@ -541,6 +555,47 @@ function validateGameState(reason = "runtime") {
   } else {
     state.contract = null;
   }
+  state.overdrive = { ...defaults.overdrive, ...(state.overdrive || {}) };
+  state.overdrive.charge = Math.max(0, Math.min(100, finiteOrDefault(state.overdrive.charge, defaults.overdrive.charge, "overdrive.charge")));
+  state.overdrive.streak = Math.floor(clampNonNegative(state.overdrive.streak, defaults.overdrive.streak, "overdrive.streak"));
+  state.milestoneStreak = Math.floor(clampNonNegative(state.milestoneStreak, defaults.milestoneStreak, "milestoneStreak"));
+  state.riskEventNextAt = clampNonNegative(state.riskEventNextAt, defaults.riskEventNextAt, "riskEventNextAt");
+  state.advancedTech = { ...defaults.advancedTech, ...(state.advancedTech || {}) };
+  state.advancedTech.points = Math.floor(clampNonNegative(state.advancedTech.points, defaults.advancedTech.points, "advancedTech.points"));
+  state.advancedTech.unlocked = !!state.advancedTech.unlocked;
+  state.challengeHistory = { ...defaults.challengeHistory, ...(state.challengeHistory || {}) };
+  state.challengeHistory.completed = Math.floor(clampNonNegative(state.challengeHistory.completed, defaults.challengeHistory.completed, "challengeHistory.completed"));
+  state.activeChallenge = typeof state.activeChallenge === "string" ? state.activeChallenge : null;
+  state.savedAt = clampNonNegative(state.savedAt, Date.now(), "savedAt");
+  state.lastTick = clampNonNegative(state.lastTick, Date.now(), "lastTick");
+  state.settings = { ...defaults.settings, ...(state.settings || {}) };
+  state.settings.showFloatingNumbers = !!state.settings.showFloatingNumbers;
+  state.settings.autoBoost = !!state.settings.autoBoost;
+  state.settings.compactUi = !!state.settings.compactUi;
+  state.settings.animations = !!state.settings.animations;
+  state.settings.reducedMotion = !!state.settings.reducedMotion;
+  state.settings.soundEnabled = !!state.settings.soundEnabled;
+  state.settings.lowPerf = !!state.settings.lowPerf;
+  state.settings.fpsFriendly = !!state.settings.fpsFriendly;
+  state.settings.confirmMajorActions = !!state.settings.confirmMajorActions;
+  state.settings.haptics = !!state.settings.haptics;
+  state.settings.soundVolume = Math.round(Math.max(0, Math.min(100, finiteOrDefault(state.settings.soundVolume, defaults.settings.soundVolume, "settings.soundVolume"))));
+  if (!["low", "medium", "high"].includes(state.settings.glowIntensity)) state.settings.glowIntensity = defaults.settings.glowIntensity;
+  if (!["short", "detailed"].includes(state.settings.numberFormat)) state.settings.numberFormat = defaults.settings.numberFormat;
+  if (!state.offlineReport || typeof state.offlineReport !== "object") {
+    state.offlineReport = null;
+  } else {
+    state.offlineReport.awaySec = clampNonNegative(state.offlineReport.awaySec, 0, "offlineReport.awaySec");
+    state.offlineReport.cappedSec = clampNonNegative(state.offlineReport.cappedSec, 0, "offlineReport.cappedSec");
+    state.offlineReport.cash = clampNonNegative(state.offlineReport.cash, 0, "offlineReport.cash");
+    state.offlineReport.rep = clampNonNegative(state.offlineReport.rep, 0, "offlineReport.rep");
+    state.offlineReport.parts = Math.floor(clampNonNegative(state.offlineReport.parts, 0, "offlineReport.parts"));
+    state.offlineReport.research = Math.floor(clampNonNegative(state.offlineReport.research, 0, "offlineReport.research"));
+    state.offlineReport.boost = Math.max(0, finiteOrDefault(state.offlineReport.boost, 1, "offlineReport.boost"));
+  }
+  report.repaired = report.count > 0;
+  activeRepairCollector = null;
+  return report;
 }
 
 function validateConfig() {
@@ -1818,6 +1873,7 @@ function performModernize(reward) {
   state.resources.cash += state.metaUpgrades.startCash * 55;
   state.skillPoints += Math.floor(reward / 4);
   validateGameState("performModernize");
+  autoSave();
   triggerModernizationEffect();
   openModernizationSummary(summary);
   renderAll();
@@ -1993,6 +2049,8 @@ function hardReset() {
   document.getElementById("confirmReset").addEventListener("click", () => {
     localStorage.removeItem(SAVE_KEY);
     state = defaultState();
+    validateGameState("hardReset");
+    autoSave();
     closeModal();
     renderAll();
   });
@@ -2946,13 +3004,18 @@ function handleDataAction(action) {
       try {
         const raw = document.getElementById("importBox").value.trim();
         const parsed = JSON.parse(decodeURIComponent(escape(atob(raw))));
-        state = normalizeState({ ...defaultState(), ...parsed, lastTick: Date.now() });
-        validateGameState("importSave");
+        const imported = sanitizeLoadedState(parsed, "importSave");
+        state = imported.state;
         recalculateProgressionEffects();
         applySettingsToUI();
+        autoSave();
         closeModal();
         renderAll();
-        toast("Save imported.");
+        if (imported.report.repaired || imported.migrated.migratedAny) {
+          toast("Save imported with repairs for compatibility.");
+        } else {
+          toast("Save imported.");
+        }
       } catch {
         toast("Invalid save data.");
       }
@@ -2964,6 +3027,8 @@ function handleDataAction(action) {
     document.getElementById("confirmDataReset")?.addEventListener("click", () => {
       localStorage.removeItem(SAVE_KEY);
       state = defaultState();
+      validateGameState("dataReset");
+      autoSave();
       applySettingsToUI();
       closeModal();
       renderAll();
@@ -2995,12 +3060,60 @@ function closeModal() {
 function autoSave() {
   try {
     if (document.hidden && Date.now() - (state.savedAt || 0) < 30000) return;
-    validateGameState("autosave");
+    const report = validateGameState("autosave");
+    state.saveVersion = SAVE_VERSION;
     state.savedAt = Date.now();
     localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+    if (report.repaired) {
+      toast("Save repaired automatically before saving.");
+    }
   } catch (error) {
     console.error("[autoSave] Failed to persist state safely.", error);
   }
+}
+
+function migrateSaveData(parsed) {
+  const incoming = (parsed && typeof parsed === "object") ? { ...parsed } : {};
+  const originalVersion = Math.floor(Number(incoming.saveVersion)) || 0;
+  const migrated = { ...incoming };
+  let migratedAny = false;
+
+  if (originalVersion < 1) {
+    migratedAny = true;
+    if (migrated.metaUpgrades?.kickstart) migrated.metaUpgrades.startCash = (migrated.metaUpgrades.startCash || 0) + migrated.metaUpgrades.kickstart;
+    if (migrated.metaUpgrades?.contractMastery) migrated.metaUpgrades.contractNegotiation = (migrated.metaUpgrades.contractNegotiation || 0) + migrated.metaUpgrades.contractMastery;
+    if (migrated.metaUpgrades?.offlineLab) migrated.metaUpgrades.offlineLogistics = (migrated.metaUpgrades.offlineLogistics || 0) + migrated.metaUpgrades.offlineLab;
+    if (migrated.metaUpgrades?.blueprintIntel) migrated.metaUpgrades.fragmentMagnet = (migrated.metaUpgrades.fragmentMagnet || 0) + migrated.metaUpgrades.blueprintIntel;
+  }
+  if (originalVersion < 2) {
+    migratedAny = true;
+    if (typeof migrated.productionMode === "string" && !migrated.productionStrategy) migrated.productionStrategy = migrated.productionMode;
+    if (migrated.lines && typeof migrated.lines === "object") {
+      lineDefs.forEach((line) => {
+        if (typeof migrated.lines[line.id] === "number") {
+          migrated.lines[line.id] = { level: migrated.lines[line.id] };
+        }
+      });
+    }
+  }
+  migrated.saveVersion = SAVE_VERSION;
+  return { state: migrated, originalVersion, migratedAny };
+}
+
+function sanitizeLoadedState(rawState, reason = "load") {
+  const migrated = migrateSaveData(rawState);
+  const merged = normalizeState({
+    ...defaultState(),
+    ...migrated.state,
+    lastTick: Date.now()
+  });
+  const prev = state;
+  state = merged;
+  const report = validateGameState(reason);
+  const sanitized = state;
+  state = prev;
+  sanitized.saveVersion = SAVE_VERSION;
+  return { state: sanitized, report, migrated };
 }
 
 function loadState() {
@@ -3008,11 +3121,20 @@ function loadState() {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return defaultState();
     const parsed = JSON.parse(raw);
-    return normalizeState({
-      ...defaultState(),
-      ...parsed,
-      lastTick: Date.now()
-    });
+    const hydrated = sanitizeLoadedState(parsed, "loadState");
+    if (hydrated.report.repaired || hydrated.migrated.migratedAny) {
+      const message = hydrated.migrated.migratedAny
+        ? "Save updated to latest format and repaired."
+        : "Save had invalid values and was repaired.";
+      startupRepairNotice = message;
+      try {
+        hydrated.state.savedAt = Date.now();
+        localStorage.setItem(SAVE_KEY, JSON.stringify(hydrated.state));
+      } catch {
+        // ignore storage write failures
+      }
+    }
+    return hydrated.state;
   } catch {
     warnRepair("Corrupted save detected. Recovered with defaults.");
     const fallback = defaultState();
