@@ -1983,3 +1983,140 @@ body.low-perf .machine,
 body.low-perf .tab.active {
   box-shadow: none !important;
 }
+
+/* Emergency readability/stability overrides */
+.topbar {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.resource-strip {
+  min-width: 0;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  padding-bottom: 2px;
+}
+
+.res-pill {
+  min-width: 92px;
+  max-width: 132px;
+  overflow: hidden;
+  scroll-snap-align: start;
+}
+
+.res-pill .k,
+.res-pill .v,
+.res-pill .rate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-btn {
+  flex-shrink: 0;
+}
+
+.toast-layer {
+  top: auto;
+  right: 8px;
+  left: 8px;
+  bottom: 74px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 44;
+}
+
+.toast {
+  width: min(92vw, 420px);
+  animation: none;
+  opacity: 0.98;
+}
+
+.toast.toast-enter {
+  animation: toastIn 160ms ease;
+}
+
+.toast.toast-exit {
+  animation: toastOut 180ms ease forwards;
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 0.98; transform: translateY(0); }
+}
+
+@keyframes toastOut {
+  from { opacity: 0.98; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-4px); }
+}
+
+.modifier-banner {
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 0.64rem;
+  background: rgba(23, 36, 58, 0.9);
+  border: 1px solid rgba(117, 176, 229, 0.52);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.factory-view {
+  min-height: 320px;
+  height: min(48dvh, 420px);
+}
+
+.machine {
+  box-shadow: 0 6px 12px rgba(4, 12, 24, 0.34), inset 0 0 0 1px rgba(141, 211, 255, 0.08);
+}
+
+.machine .machine-meta {
+  line-height: 1.2;
+  min-height: 1.35em;
+}
+
+.action-dock {
+  padding: 7px;
+}
+
+.primary-btn.state-charging {
+  border-color: rgba(126, 167, 205, 0.65);
+  background: linear-gradient(180deg, #6f8299, #53647a);
+  color: #e9f2ff;
+}
+
+.primary-btn.state-ready {
+  border-color: rgba(255, 201, 96, 0.82);
+  background: linear-gradient(180deg, #f3b95a, #be7e27);
+}
+
+.primary-btn.state-active {
+  border-color: rgba(111, 234, 255, 0.85);
+  background: linear-gradient(180deg, #7ce5ff, #4fbfe4);
+  color: #032133;
+}
+
+.primary-btn.state-cooldown {
+  border-color: rgba(140, 159, 180, 0.7);
+  background: linear-gradient(180deg, #7a8795, #5d6773);
+  color: #eef5ff;
+}
+
+.factory-links path {
+  stroke-width: 2;
+  opacity: 0.82;
+}
+
+.reward-pop,
+.money-pop,
+.tick-pop {
+  opacity: 0.9;
+}

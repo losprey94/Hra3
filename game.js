@@ -332,6 +332,10 @@ let lastRewardPopupAt = 0;
 const repairWarningState = { lastAt: 0, count: 0 };
 let startupRepairNotice = "";
 let activeRepairCollector = null;
+const toastState = {
+  active: new Map(),
+  lastShownAt: new Map()
+};
 
 const el = {
   resourceStrip: document.getElementById("resourceStrip"),
@@ -484,6 +488,10 @@ function validateGameState(reason = "runtime") {
   state.rush = { ...defaults.rush, ...(state.rush || {}) };
   state.rush.activeUntil = clampNonNegative(state.rush.activeUntil, defaults.rush.activeUntil, "rush.activeUntil");
   state.rush.cooldownUntil = clampNonNegative(state.rush.cooldownUntil, defaults.rush.cooldownUntil, "rush.cooldownUntil");
+  if (state.rush.cooldownUntil < state.rush.activeUntil) {
+    warnRepair("Rush cooldown repaired to avoid invalid overlap.");
+    state.rush.cooldownUntil = state.rush.activeUntil;
+  }
   state.runState = { ...defaults.runState, ...(state.runState || {}) };
   state.runState.firstContractBonusPending = !!state.runState.firstContractBonusPending;
   state.runState.firstContractSpeedPending = !!state.runState.firstContractSpeedPending;
@@ -501,6 +509,7 @@ function validateGameState(reason = "runtime") {
   if (!state.activeChain || typeof state.activeChain !== "object") state.activeChain = null;
   if (!state.activeRunEvent || typeof state.activeRunEvent !== "object") state.activeRunEvent = null;
   if (state.activeRunEvent && !Number.isFinite(Number(state.activeRunEvent.until))) state.activeRunEvent = null;
+  if (state.activeRunEvent && state.activeRunEvent.until < Date.now() - 1000) state.activeRunEvent = null;
   state.runEventNextAt = clampNonNegative(state.runEventNextAt, 0, "runEventNextAt");
   if (!runFocusOptions.some((f) => f.id === state.runFocus)) state.runFocus = null;
   if (!["mass", "balanced", "quality", "lean"].includes(state.productionStrategy)) state.productionStrategy = "balanced";
@@ -597,6 +606,12 @@ function validateGameState(reason = "runtime") {
   state.challengeHistory = { ...defaults.challengeHistory, ...(state.challengeHistory || {}) };
   state.challengeHistory.completed = Math.floor(clampNonNegative(state.challengeHistory.completed, defaults.challengeHistory.completed, "challengeHistory.completed"));
   state.activeChallenge = typeof state.activeChallenge === "string" ? state.activeChallenge : null;
+  if (state.activeModifier && typeof state.activeModifier !== "object") state.activeModifier = null;
+  if (state.activeModifier && !Number.isFinite(Number(state.modifierUntil))) state.modifierUntil = 0;
+  if (state.activeModifier && state.modifierUntil < Date.now() - 1000) {
+    state.activeModifier = null;
+    state.modifierUntil = 0;
+  }
   state.savedAt = clampNonNegative(state.savedAt, Date.now(), "savedAt");
   state.lastTick = clampNonNegative(state.lastTick, Date.now(), "lastTick");
   state.settings = { ...defaults.settings, ...(state.settings || {}) };
@@ -805,31 +820,11 @@ function gameTick() {
     }
     if (state.overdrive.charge < 100) overdriveReadyNotified = false;
 
-    if (now > state.rush.activeUntil && now < state.rush.cooldownUntil) {
-      const rem = Math.ceil((state.rush.cooldownUntil - now) / 1000);
-      el.rushBtn.disabled = true;
-      el.rushBtn.classList.remove("ready");
-      el.rushBtn.classList.remove("ready-pulse");
-      el.rushBtn.textContent = `Recharging (${rem}s)`;
-      el.rushStatus.textContent = `Rush cooldown: ${rem}s`;
-    } else if (now <= state.rush.activeUntil) {
-      const rem = Math.ceil((state.rush.activeUntil - now) / 1000);
-      el.rushBtn.disabled = true;
-      el.rushBtn.classList.remove("ready");
-      el.rushBtn.classList.remove("ready-pulse");
-      el.rushBtn.textContent = `Boosting (${rem}s)`;
-      el.rushStatus.textContent = `Rush active (${rem}s).`;
-      if (state.blueprints.includes("bp_assembly") && Math.random() < 0.08 * dt) state.resources.parts += 1;
-    } else {
-      el.rushBtn.disabled = false;
-      el.rushBtn.classList.add("ready");
-      el.rushBtn.classList.add("ready-pulse");
-      el.rushBtn.textContent = `Boost Production (${Math.floor(state.overdrive.charge)}%)`;
-      const dur = Math.round((5000 + state.modifiers.rushDuration * 1000) / 1000);
-      el.rushStatus.textContent = `${dur}s overclock • 32s cooldown`;
-    }
+    const rushUiState = getRushUiState(now);
+    if (rushUiState.kind === "active" && state.blueprints.includes("bp_assembly") && Math.random() < 0.08 * dt) state.resources.parts += 1;
+    updateRushButtonState(now, rushUiState);
 
-    if (state.settings.autoBoost && now >= state.rush.cooldownUntil && now > state.rush.activeUntil) {
+    if (state.settings.autoBoost && rushUiState.kind === "ready") {
       activateRush();
     }
 
@@ -1137,18 +1132,66 @@ function unlockDivision(id) {
   renderAll();
 }
 
-function activateRush() {
-  const now = Date.now();
-  if ((state.overdrive?.charge || 0) < 100) {
-    toast("Overdrive not ready yet.");
+function getRushUiState(now = Date.now()) {
+  const charge = Math.max(0, Math.min(100, safeNumber(state.overdrive?.charge || 0, "rush:charge")));
+  const activeRem = Math.max(0, Math.ceil((state.rush.activeUntil - now) / 1000));
+  const cooldownRem = Math.max(0, Math.ceil((state.rush.cooldownUntil - now) / 1000));
+  if (now <= state.rush.activeUntil) return { kind: "active", charge, remaining: activeRem };
+  if (now < state.rush.cooldownUntil) return { kind: "cooldown", charge, remaining: cooldownRem };
+  if (charge < 100) return { kind: "charging", charge, remaining: Math.ceil(100 - charge) };
+  return { kind: "ready", charge, remaining: 0 };
+}
+
+function updateRushButtonState(now = Date.now(), rushState = null) {
+  if (!el.rushBtn || !el.rushStatus) return;
+  const s = rushState || getRushUiState(now);
+  el.rushBtn.classList.remove("ready", "ready-pulse", "state-charging", "state-ready", "state-active", "state-cooldown");
+  el.rushBtn.disabled = true;
+  if (s.kind === "charging") {
+    el.rushBtn.classList.add("state-charging");
+    el.rushBtn.textContent = `Overdrive Charging ${Math.floor(s.charge)}%`;
+    el.rushStatus.textContent = `Need ${Math.max(0, 100 - Math.floor(s.charge))}% charge to boost.`;
     return;
   }
-  if (now < state.rush.cooldownUntil) return;
+  if (s.kind === "active") {
+    el.rushBtn.classList.add("state-active");
+    el.rushBtn.textContent = `Boost Active (${s.remaining}s)`;
+    el.rushStatus.textContent = `Overclocking lines • ${s.remaining}s remaining`;
+    return;
+  }
+  if (s.kind === "cooldown") {
+    el.rushBtn.classList.add("state-cooldown");
+    el.rushBtn.textContent = `Cooldown (${s.remaining}s)`;
+    el.rushStatus.textContent = `Boost recharging • ready in ${s.remaining}s`;
+    return;
+  }
+  el.rushBtn.disabled = false;
+  el.rushBtn.classList.add("ready", "ready-pulse", "state-ready");
+  el.rushBtn.textContent = "Boost Production • Ready";
+  const dur = Math.round((5000 + state.modifiers.rushDuration * 1000) / 1000);
+  el.rushStatus.textContent = `${dur}s boost • 32s cooldown`;
+}
+
+function activateRush() {
+  const now = Date.now();
+  const rushState = getRushUiState(now);
+  if (rushState.kind === "charging") {
+    toast(`Overdrive charging (${Math.floor(rushState.charge)}%).`, { key: "overdrive_not_ready", debounceMs: 1400 });
+    return;
+  }
+  if (rushState.kind === "active") {
+    toast(`Boost already active (${rushState.remaining}s).`, { key: "overdrive_active", debounceMs: 1200 });
+    return;
+  }
+  if (rushState.kind === "cooldown") {
+    toast(`Overdrive cooldown (${rushState.remaining}s).`, { key: "overdrive_cooldown", debounceMs: 1200 });
+    return;
+  }
   const duration = 5000 + state.modifiers.rushDuration * 1000;
   const cdPenalty = state.activeModifier?.rushCdAdd ? state.activeModifier.rushCdAdd * 1000 : 0;
   state.rush.activeUntil = now + duration;
   const darkShiftPenalty = state.flags.darkShift ? 3000 : 0;
-  state.rush.cooldownUntil = now + 32000 + cdPenalty + darkShiftPenalty;
+  state.rush.cooldownUntil = Math.max(state.rush.cooldownUntil, now + 32000 + cdPenalty + darkShiftPenalty);
   state.runState.rushOrdersUsed += 1;
   state.overdrive.charge = 0;
   overdriveReadyNotified = false;
@@ -1171,7 +1214,8 @@ function activateRush() {
   }
   setTimeout(() => el.rushBtn?.classList.remove("boost-fire"), 360);
   if (state.flags.smartTint) state.resources.research += 1;
-  toast("Rush Order accepted! Lines overclocked.");
+  updateRushButtonState(now, getRushUiState(now));
+  toast("Rush Order accepted! Lines overclocked.", { key: "overdrive_started", debounceMs: 1000 });
 }
 
 function getNextChainStepOffer() {
@@ -2408,18 +2452,21 @@ function renderHUD() {
   }
   goalReadyLastTick = goalReady;
 
+  const now = Date.now();
+  updateRushButtonState(now, getRushUiState(now));
+
   const bannerBits = [];
   if (state.activeModifier) {
-    const sec = Math.max(0, Math.ceil((state.modifierUntil - Date.now()) / 1000));
-    bannerBits.push(`${state.activeModifier.text} (${sec}s)`);
+    const sec = Math.max(0, Math.ceil((state.modifierUntil - now) / 1000));
+    bannerBits.push(`Incident: ${state.activeModifier.text} • ${sec}s`);
   }
   if (state.activeRunEvent?.until) {
-    const sec = Math.max(0, Math.ceil((state.activeRunEvent.until - Date.now()) / 1000));
-    bannerBits.push(`${state.activeRunEvent.text} (${sec}s)`);
+    const sec = Math.max(0, Math.ceil((state.activeRunEvent.until - now) / 1000));
+    bannerBits.push(`Event: ${state.activeRunEvent.text} • ${sec}s`);
   }
   if (el.modifierBanner) {
     el.modifierBanner.style.display = bannerBits.length ? "block" : "none";
-    el.modifierBanner.textContent = bannerBits.join(" • ");
+    el.modifierBanner.textContent = bannerBits[0] || "";
   }
 
   if (el.lastSavedLabel) {
@@ -2708,20 +2755,20 @@ function openMetaUpgradeDetail(key) {
 
 function bootstrapFactoryVisual() {
   const machinePos = {
-    cutter: { x: 16, y: 134, stage: "Frame Cut", icon: "▦" },
-    furnace: { x: 150, y: 48, stage: "Glass Forge", icon: "◍" },
-    assembler: { x: 150, y: 140, stage: "Panel Fit", icon: "◈" },
-    qc: { x: 286, y: 48, stage: "QC Scan", icon: "◎" },
-    pack: { x: 286, y: 140, stage: "Pack Out", icon: "⬣" }
+    cutter: { x: 10, y: 128, stage: "Frame Cut", icon: "▦" },
+    furnace: { x: 138, y: 42, stage: "Glass Forge", icon: "◍" },
+    assembler: { x: 138, y: 136, stage: "Panel Fit", icon: "◈" },
+    qc: { x: 266, y: 42, stage: "QC Scan", icon: "◎" },
+    pack: { x: 266, y: 136, stage: "Pack Out", icon: "⬣" }
   };
 
   const lanes = [{ y: 102, text: "Production grid" }];
 
   const belts = [
-    { x: 104, y: 168, w: 52 },
-    { x: 240, y: 168, w: 52 },
-    { x: 104, y: 82, w: 52 },
-    { x: 240, y: 82, w: 52 }
+    { x: 98, y: 162, w: 46 },
+    { x: 226, y: 162, w: 46 },
+    { x: 98, y: 76, w: 46 },
+    { x: 226, y: 76, w: 46 }
   ];
 
   lanes.forEach((lane) => {
@@ -2742,7 +2789,7 @@ function bootstrapFactoryVisual() {
       <span class="lamp"></span>
       <span class="machine-icon">${p.icon}</span>
       <span class="machine-title">${p.stage}</span>
-      <span class="machine-meta">Lv <b data-machine-lv="${id}">0</b> • <b data-machine-out="${id}">0.00</b> w/s</span>
+      <span class="machine-meta" data-machine-meta="${id}">Lv <b data-machine-lv="${id}">0</b> • <b data-machine-out="${id}">0.00</b> w/s</span>
       <span class="machine-meter"><i data-machine-meter="${id}" style="width:4%"></i></span>
     `;
     el.factoryGrid.appendChild(m);
@@ -2804,17 +2851,32 @@ function flashMachine(lineId) {
 }
 
 function updateMachineActivity() {
+  const bottleneck = bottleneckAnalysis();
   lineDefs.forEach((line) => {
     const node = document.getElementById(`machine-${line.id}`);
     if (!node) return;
     const lv = state.lines[line.id].level;
+    const unlocked = isLineUnlocked(line);
     const output = lv > 0 ? line.baseRate * lv * (1 + Math.sqrt(lv) * 0.03) : 0;
     const meter = node.querySelector(`[data-machine-meter="${line.id}"]`);
     const lvEl = node.querySelector(`[data-machine-lv="${line.id}"]`);
     const outEl = node.querySelector(`[data-machine-out="${line.id}"]`);
+    const metaEl = node.querySelector(`[data-machine-meta="${line.id}"]`);
     if (lvEl) lvEl.textContent = `${lv}`;
     if (outEl) outEl.textContent = fmt(output);
     if (meter) meter.style.width = `${Math.max(4, Math.min(100, lv * 3 + (lv > 0 ? 12 : 0)))}%`;
+    if (metaEl) {
+      if (!unlocked) {
+        const req = line.unlockReq ? `${lineDefs.find((x) => x.id === line.unlockReq.line)?.name || line.unlockReq.line} Lv ${line.unlockReq.level}` : "Unlock requirement";
+        metaEl.textContent = `Locked • Need ${req}`;
+      } else if (lv <= 0) {
+        metaEl.textContent = "Unlocked • Idle (buy first level)";
+      } else if (bottleneck.lineId === line.id && bottleneck.severity >= 8) {
+        metaEl.textContent = `Lv ${lv} • Bottleneck stage`;
+      } else {
+        metaEl.innerHTML = `Lv <b data-machine-lv="${line.id}">${lv}</b> • <b data-machine-out="${line.id}">${fmt(output)}</b> w/s`;
+      }
+    }
     if (lv > 0) {
       node.classList.add("active");
     } else {
@@ -3066,12 +3128,53 @@ function handleDataAction(action) {
   }
 }
 
-function toast(msg) {
+function toast(msg, opts = {}) {
+  if (!el.toastLayer) return;
+  const key = opts.key || msg;
+  const now = Date.now();
+  const debounceMs = Math.max(0, Number(opts.debounceMs ?? 700));
+  const last = toastState.lastShownAt.get(key) || 0;
+  const existing = toastState.active.get(key);
+  if (existing && existing.node?.isConnected) {
+    existing.node.textContent = msg;
+    existing.node.classList.remove("toast-enter");
+    void existing.node.offsetWidth;
+    existing.node.classList.add("toast-enter");
+    clearTimeout(existing.timer);
+    const ttl = Math.max(1200, Number(opts.durationMs ?? 2200));
+    existing.timer = setTimeout(() => dismissToast(key), ttl);
+    toastState.lastShownAt.set(key, now);
+    return;
+  }
+  if (now - last < debounceMs) return;
+  const maxVisible = 2;
+  const keys = Array.from(toastState.active.keys());
+  while (keys.length >= maxVisible) {
+    dismissToast(keys.shift());
+  }
+
   const t = document.createElement("div");
-  t.className = "toast";
+  t.className = "toast toast-enter";
   t.textContent = msg;
   el.toastLayer.appendChild(t);
-  setTimeout(() => t.remove(), 2200);
+  const ttl = Math.max(1200, Number(opts.durationMs ?? 2200));
+  const timer = setTimeout(() => dismissToast(key), ttl);
+  toastState.active.set(key, { node: t, timer });
+  toastState.lastShownAt.set(key, now);
+}
+
+function dismissToast(key) {
+  const entry = toastState.active.get(key);
+  if (!entry) return;
+  clearTimeout(entry.timer);
+  const node = entry.node;
+  if (node?.isConnected) {
+    node.classList.add("toast-exit");
+    setTimeout(() => {
+      node.remove();
+    }, 180);
+  }
+  toastState.active.delete(key);
 }
 
 function openModal(html) {
